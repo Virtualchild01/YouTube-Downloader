@@ -15,21 +15,20 @@ import java.util.regex.Pattern
 class YouTubeApiService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
-    // Verified active community Cobalt instances that handle YouTube streams
-    private val cobaltInstances = listOf(
+    // Your dedicated personal Cobalt instance on Render is first!
+    private val defaultCobaltInstances = listOf(
+        "https://cobalt-api-ntzc.onrender.com",
         "https://cobalt.meowing.de",
-        "https://cobalt.canine.tools",
-        "https://cobalt-backend.canine.tools",
-        "https://api.cobalt.tools"
+        "https://cobalt.canine.tools"
     )
 
     /**
-     * Extracts YouTube 11-character video ID from varied URL formats (shorts, youtu.be, watch, embed).
+     * Extracts YouTube 11-character video ID from varied URL formats (shorts, youtu.be, watch, embed, share urls).
      */
     fun extractVideoId(text: String): String? {
         val pattern = Pattern.compile(
@@ -45,11 +44,18 @@ class YouTubeApiService {
     /**
      * Fetches video information and resolves verified download links.
      */
-    suspend fun fetchVideoInfo(videoId: String): Result<YouTubeVideoInfo> = withContext(Dispatchers.IO) {
+    suspend fun fetchVideoInfo(videoId: String, customServerUrl: String? = null): Result<YouTubeVideoInfo> = withContext(Dispatchers.IO) {
         var videoTitle = "YouTube Video"
         var videoAuthor = "YouTube Creator"
         val lengthSeconds = 240L
         val thumbnailUrl = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
+
+        // Build list of instances to query: user custom server has highest priority
+        val instances = mutableListOf<String>()
+        if (!customServerUrl.isNullOrBlank()) {
+            instances.add(customServerUrl.trim().trimEnd('/'))
+        }
+        instances.addAll(defaultCobaltInstances)
 
         // 1. Fetch official title & author via YouTube oEmbed API
         try {
@@ -65,11 +71,11 @@ class YouTubeApiService {
             }
         } catch (_: Exception) {}
 
-        // 2. Fetch verified stream links through Cobalt instances
+        // 2. Query Cobalt instances for direct stream links
         val formats = mutableListOf<VideoFormat>()
 
-        // 720p HD (Best balance, usually available on all instances)
-        val stream720 = fetchCobaltStream(videoId, "720", isAudio = false)
+        // 720p HD (Optimal default)
+        val stream720 = fetchCobaltStream(instances, videoId, "720", isAudio = false)
         if (stream720 != null) {
             formats.add(
                 VideoFormat(
@@ -85,7 +91,7 @@ class YouTubeApiService {
         }
 
         // 1080p Full HD
-        val stream1080 = fetchCobaltStream(videoId, "1080", isAudio = false)
+        val stream1080 = fetchCobaltStream(instances, videoId, "1080", isAudio = false)
         if (stream1080 != null) {
             formats.add(
                 VideoFormat(
@@ -100,8 +106,8 @@ class YouTubeApiService {
             )
         }
 
-        // 360p / 480p SD
-        val stream360 = fetchCobaltStream(videoId, "360", isAudio = false) ?: stream720
+        // 360p SD
+        val stream360 = fetchCobaltStream(instances, videoId, "360", isAudio = false) ?: stream720
         if (stream360 != null && stream360 != stream720) {
             formats.add(
                 VideoFormat(
@@ -117,7 +123,7 @@ class YouTubeApiService {
         }
 
         // Audio track (MP3)
-        val streamAudio = fetchCobaltStream(videoId, "720", isAudio = true)
+        val streamAudio = fetchCobaltStream(instances, videoId, "720", isAudio = true)
         if (streamAudio != null) {
             formats.add(
                 VideoFormat(
@@ -133,7 +139,9 @@ class YouTubeApiService {
         }
 
         if (formats.isEmpty()) {
-            return@withContext Result.failure(Exception("Не удалось получить рабочую ссылку от серверов. Попробуйте через пару минут."))
+            return@withContext Result.failure(
+                Exception("Сервер Render ещё запускается (пробуждается) или не вернул видео. Подождите 30 секунд и попробуйте снова.")
+            )
         }
 
         Result.success(
@@ -148,10 +156,10 @@ class YouTubeApiService {
         )
     }
 
-    private fun fetchCobaltStream(videoId: String, quality: String, isAudio: Boolean): String? {
+    private fun fetchCobaltStream(instances: List<String>, videoId: String, quality: String, isAudio: Boolean): String? {
         val targetUrl = "https://www.youtube.com/watch?v=$videoId"
 
-        for (instance in cobaltInstances) {
+        for (instance in instances) {
             try {
                 val json = JsonObject().apply {
                     addProperty("url", targetUrl)

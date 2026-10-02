@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -39,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "yt_downloader_prefs"
         private const val KEY_THEME = "key_theme_mode"
+        private const val KEY_CUSTOM_SERVER = "key_custom_server_url"
+
         private const val THEME_AUTO = 0
         private const val THEME_DARK = 1
         private const val THEME_LIGHT = 2
@@ -156,6 +160,11 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent.createChooser(shareIntent, "Поделиться видео"))
         }
 
+        // Settings button for custom Render / Cobalt server
+        binding.btnSettings.setOnClickListener {
+            showServerSettingsDialog()
+        }
+
         // Support Developer buttons
         binding.btnSupport.setOnClickListener {
             showSupportDialog()
@@ -186,13 +195,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val customServer = prefs.getString(KEY_CUSTOM_SERVER, null)?.takeIf { it.isNotBlank() }
+
         binding.progressIndicator.isIndeterminate = true
         binding.progressIndicator.visibility = View.VISIBLE
         binding.tvStatus.text = getString(R.string.status_fetching_info)
         binding.btnFetch.isEnabled = false
 
         lifecycleScope.launch {
-            val result = apiService.fetchVideoInfo(videoId)
+            val result = apiService.fetchVideoInfo(videoId, customServer)
             binding.progressIndicator.visibility = View.GONE
             binding.btnFetch.isEnabled = true
 
@@ -285,7 +296,7 @@ class MainActivity : AppCompatActivity() {
         binding.progressIndicator.progress = 0
         binding.progressIndicator.visibility = View.VISIBLE
         binding.btnDownloadSelected.isEnabled = false
-        binding.tvStatus.text = "Подключение к потоку..."
+        binding.tvStatus.text = "Подключение к серверу..."
 
         lifecycleScope.launch {
             val result = DownloadUtil.downloadDirectly(
@@ -335,6 +346,39 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Файл сохранён в папку «Загрузки»", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun showServerSettingsDialog() {
+        val currentServer = prefs.getString(KEY_CUSTOM_SERVER, "") ?: ""
+
+        val container = FrameLayout(this)
+        val paddingPx = (20 * resources.displayMetrics.density).toInt()
+        container.setPadding(paddingPx, paddingPx / 2, paddingPx, 0)
+
+        val input = EditText(this).apply {
+            hint = "https://your-service.onrender.com"
+            setText(currentServer)
+            maxLines = 1
+            isSingleLine = true
+        }
+        container.addView(input)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Настройки сервера")
+            .setMessage("Укажите адрес вашего инстанса Cobalt (например, на Render):")
+            .setView(container)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val newUrl = input.text.toString().trim()
+                prefs.edit().putString(KEY_CUSTOM_SERVER, newUrl).apply()
+                val msg = if (newUrl.isNotEmpty()) "Сервер сохранён: $newUrl" else "Используются публичные серверы"
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Очистить") { _, _ ->
+                prefs.edit().remove(KEY_CUSTOM_SERVER).apply()
+                Toast.makeText(this, "Сброшено на публичные серверы", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private fun showSupportDialog() {
