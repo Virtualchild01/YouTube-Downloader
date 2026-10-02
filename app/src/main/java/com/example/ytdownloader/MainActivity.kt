@@ -25,6 +25,7 @@ import com.example.ytdownloader.databinding.ActivityMainBinding
 import com.example.ytdownloader.utils.DownloadUtil
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -185,6 +186,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        binding.progressIndicator.isIndeterminate = true
         binding.progressIndicator.visibility = View.VISIBLE
         binding.tvStatus.text = getString(R.string.status_fetching_info)
         binding.btnFetch.isEnabled = false
@@ -279,20 +281,43 @@ class MainActivity : AppCompatActivity() {
         val video = currentVideoInfo ?: return
         val format = selectedFormat ?: return
 
-        try {
-            DownloadUtil.enqueueDownload(
-                context = this,
+        binding.progressIndicator.isIndeterminate = false
+        binding.progressIndicator.progress = 0
+        binding.progressIndicator.visibility = View.VISIBLE
+        binding.btnDownloadSelected.isEnabled = false
+        binding.tvStatus.text = "Подключение к потоку..."
+
+        lifecycleScope.launch {
+            val result = DownloadUtil.downloadDirectly(
+                context = this@MainActivity,
                 url = format.downloadUrl,
                 title = video.title,
                 quality = format.qualityLabel,
                 extension = format.extension
-            )
+            ) { percent, downloaded, total ->
+                if (percent >= 0) {
+                    binding.progressIndicator.isIndeterminate = false
+                    binding.progressIndicator.progress = percent
+                    val mbDownloaded = downloaded / (1024.0 * 1024.0)
+                    val mbTotal = total / (1024.0 * 1024.0)
+                    binding.tvStatus.text = String.format(Locale.US, "Скачивание: %d%% (%.1f / %.1f МБ)", percent, mbDownloaded, mbTotal)
+                } else {
+                    binding.progressIndicator.isIndeterminate = true
+                    val mbDownloaded = downloaded / (1024.0 * 1024.0)
+                    binding.tvStatus.text = String.format(Locale.US, "Скачано: %.1f МБ...", mbDownloaded)
+                }
+            }
 
-            binding.tvStatus.text = getString(R.string.status_success)
-            Toast.makeText(this, "Скачивание началось! Файл будет в папке «Загрузки»", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            binding.tvStatus.text = getString(R.string.error_download_failed)
-            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+            binding.progressIndicator.visibility = View.GONE
+            binding.btnDownloadSelected.isEnabled = true
+
+            result.onSuccess { file ->
+                binding.tvStatus.text = "Готово! Файл сохранён: ${file.name}"
+                Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                binding.tvStatus.text = "Ошибка: ${error.message}"
+                Toast.makeText(this@MainActivity, "Ошибка скачивания: ${error.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
