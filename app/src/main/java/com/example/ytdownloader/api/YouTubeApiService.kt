@@ -1,5 +1,6 @@
 package com.example.ytdownloader.api
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
@@ -15,17 +16,10 @@ import java.util.regex.Pattern
 class YouTubeApiService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(25, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
-
-    // Your dedicated personal Cobalt instance on Render is first!
-    private val defaultCobaltInstances = listOf(
-        "https://cobalt-api-ntzc.onrender.com",
-        "https://cobalt.meowing.de",
-        "https://cobalt.canine.tools"
-    )
 
     /**
      * Extracts YouTube 11-character video ID from varied URL formats (shorts, youtu.be, watch, embed, share urls).
@@ -42,20 +36,13 @@ class YouTubeApiService {
     }
 
     /**
-     * Fetches video information and resolves verified download links.
+     * Fetches video information and resolves direct media stream links on-device (client-side).
      */
     suspend fun fetchVideoInfo(videoId: String, customServerUrl: String? = null): Result<YouTubeVideoInfo> = withContext(Dispatchers.IO) {
         var videoTitle = "YouTube Video"
         var videoAuthor = "YouTube Creator"
-        val lengthSeconds = 240L
-        val thumbnailUrl = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
-
-        // Build list of instances to query: user custom server has highest priority
-        val instances = mutableListOf<String>()
-        if (!customServerUrl.isNullOrBlank()) {
-            instances.add(customServerUrl.trim().trimEnd('/'))
-        }
-        instances.addAll(defaultCobaltInstances)
+        var lengthSeconds = 240L
+        var thumbnailUrl = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
 
         // 1. Fetch official title & author via YouTube oEmbed API
         try {
@@ -71,129 +58,214 @@ class YouTubeApiService {
             }
         } catch (_: Exception) {}
 
-        // 2. Query Cobalt instances for direct stream links
-        val formats = mutableListOf<VideoFormat>()
-
-        // 720p HD (Optimal default)
-        val stream720 = fetchCobaltStream(instances, videoId, "720", isAudio = false)
-        if (stream720 != null) {
-            formats.add(
-                VideoFormat(
-                    id = "720p",
-                    qualityLabel = "720p HD",
-                    extension = "mp4",
-                    fileSizeBytes = estimateVideoSizeBytes("720p", lengthSeconds),
-                    fileSizeFormatted = formatBytes(estimateVideoSizeBytes("720p", lengthSeconds)),
-                    downloadUrl = stream720,
-                    isAudioOnly = false
+        // 2. Client-side native InnerTube extraction (Runs directly on user device with user IP)
+        val nativeFormats = fetchClientSideStreams(videoId)
+        if (nativeFormats.isNotEmpty()) {
+            return@withContext Result.success(
+                YouTubeVideoInfo(
+                    videoId = videoId,
+                    title = videoTitle,
+                    author = videoAuthor,
+                    thumbnailUrl = thumbnailUrl,
+                    durationSeconds = lengthSeconds,
+                    formats = nativeFormats
                 )
             )
         }
 
-        // 1080p Full HD
-        val stream1080 = fetchCobaltStream(instances, videoId, "1080", isAudio = false)
-        if (stream1080 != null) {
-            formats.add(
-                VideoFormat(
-                    id = "1080p",
-                    qualityLabel = "1080p Full HD",
-                    extension = "mp4",
-                    fileSizeBytes = estimateVideoSizeBytes("1080p", lengthSeconds),
-                    fileSizeFormatted = formatBytes(estimateVideoSizeBytes("1080p", lengthSeconds)),
-                    downloadUrl = stream1080,
-                    isAudioOnly = false
+        // 3. Fallback to custom Cobalt server if user specified one in settings
+        if (!customServerUrl.isNullOrBlank()) {
+            val customStream = fetchCobaltStream(customServerUrl, videoId, "720")
+            if (customStream != null) {
+                val formats = listOf(
+                    VideoFormat(
+                        id = "720p",
+                        qualityLabel = "720p HD",
+                        extension = "mp4",
+                        fileSizeBytes = estimateVideoSizeBytes("720p", lengthSeconds),
+                        fileSizeFormatted = formatBytes(estimateVideoSizeBytes("720p", lengthSeconds)),
+                        downloadUrl = customStream,
+                        isAudioOnly = false
+                    )
                 )
-            )
-        }
-
-        // 360p SD
-        val stream360 = fetchCobaltStream(instances, videoId, "360", isAudio = false) ?: stream720
-        if (stream360 != null && stream360 != stream720) {
-            formats.add(
-                VideoFormat(
-                    id = "360p",
-                    qualityLabel = "360p SD",
-                    extension = "mp4",
-                    fileSizeBytes = estimateVideoSizeBytes("360p", lengthSeconds),
-                    fileSizeFormatted = formatBytes(estimateVideoSizeBytes("360p", lengthSeconds)),
-                    downloadUrl = stream360,
-                    isAudioOnly = false
+                return@withContext Result.success(
+                    YouTubeVideoInfo(
+                        videoId = videoId,
+                        title = videoTitle,
+                        author = videoAuthor,
+                        thumbnailUrl = thumbnailUrl,
+                        durationSeconds = lengthSeconds,
+                        formats = formats
+                    )
                 )
-            )
+            }
         }
 
-        // Audio track (MP3)
-        val streamAudio = fetchCobaltStream(instances, videoId, "720", isAudio = true)
-        if (streamAudio != null) {
-            formats.add(
-                VideoFormat(
-                    id = "audio_mp3",
-                    qualityLabel = "Аудио (MP3)",
-                    extension = "mp3",
-                    fileSizeBytes = estimateAudioSizeBytes(lengthSeconds),
-                    fileSizeFormatted = formatBytes(estimateAudioSizeBytes(lengthSeconds)),
-                    downloadUrl = streamAudio,
-                    isAudioOnly = true
-                )
-            )
-        }
-
-        if (formats.isEmpty()) {
-            return@withContext Result.failure(
-                Exception("Сервер Render ещё запускается (пробуждается) или не вернул видео. Подождите 30 секунд и попробуйте снова.")
-            )
-        }
-
-        Result.success(
-            YouTubeVideoInfo(
-                videoId = videoId,
-                title = videoTitle,
-                author = videoAuthor,
-                thumbnailUrl = thumbnailUrl,
-                durationSeconds = lengthSeconds,
-                formats = formats
-            )
-        )
+        Result.failure(Exception("YouTube заблокировал доступ к потоку. Убедитесь, что включен VPN."))
     }
 
-    private fun fetchCobaltStream(instances: List<String>, videoId: String, quality: String, isAudio: Boolean): String? {
-        val targetUrl = "https://www.youtube.com/watch?v=$videoId"
+    /**
+     * Directly queries YouTube's Embedded Web & VR InnerTube clients from user's device.
+     * These endpoints deliver unthrottled direct progressive MP4 streams.
+     */
+    private fun fetchClientSideStreams(videoId: String): List<VideoFormat> {
+        val clientConfigs = listOf(
+            // Web Embedded Player client (Embed iframe)
+            Triple(
+                "WEB_EMBEDDED_PLAYER",
+                "1.20240101.01.00",
+                JsonObject().apply {
+                    val c = JsonObject().apply {
+                        addProperty("clientName", "WEB_EMBEDDED_PLAYER")
+                        addProperty("clientVersion", "1.20240101.01.00")
+                        addProperty("hl", "ru")
+                        addProperty("gl", "RU")
+                    }
+                    val thirdParty = JsonObject().apply {
+                        addProperty("embedUrl", "https://www.youtube.com")
+                    }
+                    add("client", c)
+                    add("thirdParty", thirdParty)
+                }
+            ),
+            // Android VR client
+            Triple(
+                "ANDROID_VR",
+                "1.37",
+                JsonObject().apply {
+                    val c = JsonObject().apply {
+                        addProperty("clientName", "ANDROID_VR")
+                        addProperty("clientVersion", "1.37")
+                        addProperty("hl", "en")
+                        addProperty("gl", "US")
+                    }
+                    add("client", c)
+                }
+            )
+        )
 
-        for (instance in instances) {
+        for ((_, _, contextObj) in clientConfigs) {
             try {
                 val json = JsonObject().apply {
-                    addProperty("url", targetUrl)
-                    if (isAudio) {
-                        addProperty("downloadMode", "audio")
-                        addProperty("audioFormat", "mp3")
-                    } else {
-                        addProperty("videoQuality", quality)
-                        addProperty("downloadMode", "auto")
-                    }
+                    add("context", contextObj)
+                    addProperty("videoId", videoId)
                 }
 
                 val req = Request.Builder()
-                    .url(instance.trimEnd('/') + "/")
-                    .header("Accept", "application/json")
+                    .url("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
                     .header("Content-Type", "application/json")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Referer", "https://www.youtube.com/embed/$videoId")
                     .post(json.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 
                 client.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val body = resp.body?.string() ?: ""
-                        val root = JsonParser.parseString(body).asJsonObject
-                        val status = root.get("status")?.asString ?: ""
-                        val streamUrl = root.get("url")?.asString ?: ""
+                    if (!resp.isSuccessful) return@use
 
-                        if ((status == "stream" || status == "redirect" || status == "tunnel") && streamUrl.startsWith("http")) {
-                            return streamUrl
+                    val body = resp.body?.string() ?: return@use
+                    val root = JsonParser.parseString(body).asJsonObject
+
+                    val playability = root.getAsJsonObject("playabilityStatus")
+                    val status = playability?.get("status")?.asString ?: ""
+                    if (status != "OK") return@use
+
+                    val streamingData = root.getAsJsonObject("streamingData") ?: return@use
+                    val formatsArray = streamingData.getAsJsonArray("formats") ?: JsonArray()
+                    val adaptiveArray = streamingData.getAsJsonArray("adaptiveFormats") ?: JsonArray()
+
+                    val result = mutableListOf<VideoFormat>()
+
+                    // Progressive streams (containing both video and audio track)
+                    for (elem in formatsArray) {
+                        val fmt = elem.asJsonObject
+                        val url = fmt.get("url")?.asString ?: continue
+                        val qualityLabel = fmt.get("qualityLabel")?.asString ?: "MP4"
+                        val itag = fmt.get("itag")?.asInt ?: 0
+                        val contentLength = fmt.get("contentLength")?.asLong ?: 0L
+
+                        val displayQuality = if (qualityLabel.contains("720")) {
+                            "720p HD"
+                        } else if (qualityLabel.contains("360")) {
+                            "360p SD"
+                        } else {
+                            qualityLabel
                         }
+
+                        result.add(
+                            VideoFormat(
+                                id = "prog_$itag",
+                                qualityLabel = displayQuality,
+                                extension = "mp4",
+                                fileSizeBytes = contentLength,
+                                fileSizeFormatted = formatBytes(contentLength),
+                                downloadUrl = url,
+                                isAudioOnly = false
+                            )
+                        )
+                    }
+
+                    // Audio-only stream (itag 140: AAC 128kbps)
+                    for (elem in adaptiveArray) {
+                        val fmt = elem.asJsonObject
+                        val itag = fmt.get("itag")?.asInt ?: 0
+                        val url = fmt.get("url")?.asString ?: continue
+
+                        if (itag == 140) {
+                            val contentLength = fmt.get("contentLength")?.asLong ?: 0L
+                            result.add(
+                                VideoFormat(
+                                    id = "audio_140",
+                                    qualityLabel = "Аудио (M4A / MP3)",
+                                    extension = "m4a",
+                                    fileSizeBytes = contentLength,
+                                    fileSizeFormatted = formatBytes(contentLength),
+                                    downloadUrl = url,
+                                    isAudioOnly = true
+                                )
+                            )
+                            break
+                        }
+                    }
+
+                    if (result.isNotEmpty()) {
+                        return result
                     }
                 }
             } catch (_: Exception) {}
         }
+        return emptyList()
+    }
+
+    private fun fetchCobaltStream(serverUrl: String, videoId: String, quality: String): String? {
+        val targetUrl = "https://www.youtube.com/watch?v=$videoId"
+        try {
+            val json = JsonObject().apply {
+                addProperty("url", targetUrl)
+                addProperty("videoQuality", quality)
+                addProperty("downloadMode", "auto")
+            }
+
+            val req = Request.Builder()
+                .url(serverUrl.trimEnd('/') + "/")
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val root = JsonParser.parseString(body).asJsonObject
+                    val status = root.get("status")?.asString ?: ""
+                    val streamUrl = root.get("url")?.asString ?: ""
+
+                    if ((status == "stream" || status == "redirect" || status == "tunnel") && streamUrl.startsWith("http")) {
+                        return streamUrl
+                    }
+                }
+            }
+        } catch (_: Exception) {}
         return null
     }
 
