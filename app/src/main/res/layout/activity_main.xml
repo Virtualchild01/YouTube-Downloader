@@ -494,4 +494,12 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+        <WebView
+        android:id="@+id/headlessWebView"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="invisible"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+    
 </androidx.constraintlayout.widget.ConstraintLayout>
