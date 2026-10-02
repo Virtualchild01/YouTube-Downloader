@@ -198,7 +198,7 @@ class MainActivity : AppCompatActivity() {
                 currentVideoInfo = info
                 displayVideoPreview(info)
             }.onFailure { error ->
-                binding.tvStatus.text = getString(R.string.error_fetch_failed)
+                binding.tvStatus.text = error.message ?: getString(R.string.error_fetch_failed)
                 Toast.makeText(this@MainActivity, error.message ?: getString(R.string.error_fetch_failed), Toast.LENGTH_LONG).show()
             }
         }

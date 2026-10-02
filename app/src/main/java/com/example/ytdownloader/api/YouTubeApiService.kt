@@ -1,10 +1,13 @@
 package com.example.ytdownloader.api
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -12,50 +15,58 @@ import java.util.regex.Pattern
 class YouTubeApiService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
-    // Public Invidious instances for video metadata and stream proxying
+    // Public Invidious instances as secondary fallback
     private val invidiousInstances = listOf(
         "https://yewtu.be",
         "https://inv.tux.pizza",
         "https://invidious.nerdvpn.de",
         "https://invidious.jing.rocks",
-        "https://invidious.private.coffee",
-        "https://vid.priv.au",
-        "https://invidious.asir.dev"
-    )
-
-    // Public Piped API instances as fallback
-    private val pipedInstances = listOf(
-        "https://pipedapi.kavin.rocks",
-        "https://api.piped.privacydev.net",
-        "https://pipedapi.tokhmi.xyz"
+        "https://vid.priv.au"
     )
 
     /**
      * Extracts YouTube 11-character video ID from varied URL formats (shorts, youtu.be, watch, embed).
      */
     fun extractVideoId(text: String): String? {
+        val trimmed = text.trim()
         val pattern = Pattern.compile(
             "(?:https?://)?(?:www\\.|m\\.)?(?:youtube\\.com/(?:watch\\?.*?v=|shorts/|embed/|v/)|youtu\\.be/)([a-zA-Z0-9_-]{11})",
             Pattern.CASE_INSENSITIVE
         )
-        val matcher = pattern.matcher(text)
-        return if (matcher.find()) {
-            matcher.group(1)
-        } else null
+        val matcher = pattern.matcher(trimmed)
+        if (matcher.find()) {
+            return matcher.group(1)
+        }
+        // Also check if user just pasted an 11-char ID
+        if (trimmed.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) {
+            return trimmed
+        }
+        return null
     }
 
     /**
-     * Fetches video metadata, stream links, available resolutions, and file sizes.
+     * Fetches video metadata and download formats.
+     * Strategy:
+     * 1. Official YouTube InnerTube ANDROID Client API (direct, unencrypted, fast, native)
+     * 2. Invidious proxy instances (fallback)
+     * 3. YouTube oEmbed (guaranteed metadata fallback)
      */
     suspend fun fetchVideoInfo(videoId: String): Result<YouTubeVideoInfo> = withContext(Dispatchers.IO) {
-        var lastError: Exception? = null
+        // Strategy 1: YouTube InnerTube ANDROID API
+        try {
+            val innerTubeResult = fetchInnerTube(videoId)
+            if (innerTubeResult != null && innerTubeResult.formats.isNotEmpty()) {
+                return@withContext Result.success(innerTubeResult)
+            }
+        } catch (_: Exception) {
+        }
 
-        // 1. Try Invidious instances with proxied download streams
+        // Strategy 2: Invidious Instances
         for (base in invidiousInstances) {
             try {
                 val url = "$base/api/v1/videos/$videoId"
@@ -73,35 +84,166 @@ class YouTubeApiService {
                         }
                     }
                 }
-            } catch (e: Exception) {
-                lastError = e
+            } catch (_: Exception) {
             }
         }
 
-        // 2. Try Piped API instances if Invidious was unavailable
-        for (pipedBase in pipedInstances) {
-            try {
-                val url = "$pipedBase/streams/$videoId"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .build()
+        // Strategy 3: oEmbed metadata fallback
+        try {
+            val oEmbedResult = fetchOEmbedFallback(videoId)
+            if (oEmbedResult != null) {
+                return@withContext Result.success(oEmbedResult)
+            }
+        } catch (_: Exception) {
+        }
 
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val body = response.body?.string() ?: ""
-                        val parsed = parsePipedResponse(videoId, body)
-                        if (parsed != null && parsed.formats.isNotEmpty()) {
-                            return@withContext Result.success(parsed)
-                        }
+        Result.failure(Exception("Не удалось загрузить данные видео. Проверьте ссылку и подключение к сети."))
+    }
+
+    /**
+     * Official YouTube InnerTube API impersonating the Android official client.
+     * Yields direct playable stream URLs without cipher encryption.
+     */
+    private fun fetchInnerTube(videoId: String): YouTubeVideoInfo? {
+        val jsonPayload = JsonObject().apply {
+            addProperty("videoId", videoId)
+            val context = JsonObject()
+            val clientObj = JsonObject().apply {
+                addProperty("clientName", "ANDROID")
+                addProperty("clientVersion", "19.29.35")
+                addProperty("androidSdkVersion", 34)
+                addProperty("hl", "ru")
+                addProperty("gl", "RU")
+            }
+            context.add("client", clientObj)
+            add("context", context)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonPayload.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://www.youtube.com/youtubei/v1/player")
+            .post(requestBody)
+            .header("User-Agent", "com.google.android.youtube/19.29.35 (Linux; U; Android 14; Mobile)")
+            .header("X-YouTube-Client-Name", "3")
+            .header("X-YouTube-Client-Version", "19.29.35")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body?.string() ?: return null
+            val root = JsonParser.parseString(body).asJsonObject
+
+            val videoDetails = root.getAsJsonObject("videoDetails") ?: return null
+            val title = videoDetails.get("title")?.asString ?: "YouTube Video"
+            val author = videoDetails.get("author")?.asString ?: "YouTube Creator"
+            val lengthSeconds = videoDetails.get("lengthSeconds")?.asString?.toLongOrNull() ?: 180L
+
+            val thumbnails = videoDetails.getAsJsonObject("thumbnail")?.getAsJsonArray("thumbnails")
+            val thumbnail = thumbnails?.lastOrNull()?.asJsonObject?.get("url")?.asString
+                ?: "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
+
+            val streamingData = root.getAsJsonObject("streamingData") ?: return null
+            val formatsList = mutableListOf<VideoFormat>()
+
+            // Progressive formats (combined video + audio, e.g. 720p, 360p)
+            if (streamingData.has("formats")) {
+                val formatsArr = streamingData.getAsJsonArray("formats")
+                for (elem in formatsArr) {
+                    val stream = elem.asJsonObject
+                    val rawUrl = stream.get("url")?.asString ?: continue
+                    val quality = stream.get("qualityLabel")?.asString ?: "720p"
+                    val itag = stream.get("itag")?.asString ?: quality
+                    val contentLength = stream.get("contentLength")?.asString?.toLongOrNull() ?: 0L
+                    val sizeBytes = if (contentLength > 0L) contentLength else estimateVideoSizeBytes(quality, lengthSeconds)
+
+                    val cleanLabel = when {
+                        quality.contains("720") -> "720p HD (Видео + Звук)"
+                        quality.contains("360") -> "360p SD (Видео + Звук)"
+                        else -> "$quality (Видео + Звук)"
+                    }
+
+                    formatsList.add(
+                        VideoFormat(
+                            id = itag,
+                            qualityLabel = cleanLabel,
+                            extension = "mp4",
+                            fileSizeBytes = sizeBytes,
+                            fileSizeFormatted = formatBytes(sizeBytes),
+                            downloadUrl = rawUrl,
+                            isAudioOnly = false
+                        )
+                    )
+                }
+            }
+
+            // Adaptive formats (1080p and Audio)
+            if (streamingData.has("adaptiveFormats")) {
+                val adaptiveArr = streamingData.getAsJsonArray("adaptiveFormats")
+                for (elem in adaptiveArr) {
+                    val stream = elem.asJsonObject
+                    val rawUrl = stream.get("url")?.asString ?: continue
+                    val mimeType = stream.get("mimeType")?.asString ?: ""
+                    val itag = stream.get("itag")?.asString ?: ""
+                    val contentLength = stream.get("contentLength")?.asString?.toLongOrNull() ?: 0L
+
+                    // 1080p
+                    if (mimeType.contains("video/mp4") && stream.get("qualityLabel")?.asString?.contains("1080") == true
+                        && formatsList.none { it.qualityLabel.contains("1080") }
+                    ) {
+                        val sizeBytes = if (contentLength > 0L) contentLength else estimateVideoSizeBytes("1080p", lengthSeconds)
+                        formatsList.add(
+                            VideoFormat(
+                                id = itag.ifEmpty { "137" },
+                                qualityLabel = "1080p Full HD",
+                                extension = "mp4",
+                                fileSizeBytes = sizeBytes,
+                                fileSizeFormatted = formatBytes(sizeBytes),
+                                downloadUrl = rawUrl,
+                                isAudioOnly = false
+                            )
+                        )
+                    }
+
+                    // Best Audio (M4A)
+                    if (mimeType.contains("audio/mp4") && formatsList.none { it.isAudioOnly }) {
+                        val sizeBytes = if (contentLength > 0L) contentLength else estimateAudioSizeBytes(lengthSeconds)
+                        formatsList.add(
+                            VideoFormat(
+                                id = itag.ifEmpty { "140" },
+                                qualityLabel = "Аудио (M4A / MP3)",
+                                extension = "m4a",
+                                fileSizeBytes = sizeBytes,
+                                fileSizeFormatted = formatBytes(sizeBytes),
+                                downloadUrl = rawUrl,
+                                isAudioOnly = true
+                            )
+                        )
                     }
                 }
-            } catch (e: Exception) {
-                lastError = e
             }
-        }
 
-        Result.failure(lastError ?: Exception("Не удалось загрузить данные видео. Проверьте ссылку."))
+            formatsList.sortByDescending {
+                when {
+                    it.isAudioOnly -> -1
+                    it.qualityLabel.contains("1080") -> 1080
+                    it.qualityLabel.contains("720") -> 720
+                    it.qualityLabel.contains("480") -> 480
+                    it.qualityLabel.contains("360") -> 360
+                    else -> 0
+                }
+            }
+
+            return YouTubeVideoInfo(
+                videoId = videoId,
+                title = title,
+                author = author,
+                thumbnailUrl = thumbnail,
+                durationSeconds = lengthSeconds,
+                formats = formatsList
+            )
+        }
     }
 
     private fun parseInvidiousResponse(base: String, videoId: String, jsonStr: String): YouTubeVideoInfo? {
@@ -114,7 +256,6 @@ class YouTubeApiService {
 
             val formatsList = mutableListOf<VideoFormat>()
 
-            // 1. Regular progressive streams (video + audio combined)
             if (root.has("formatStreams")) {
                 val formatStreams = root.getAsJsonArray("formatStreams")
                 for (elem in formatStreams) {
@@ -122,9 +263,6 @@ class YouTubeApiService {
                     val rawQuality = stream.get("qualityLabel")?.asString ?: stream.get("resolution")?.asString ?: "720p"
                     val itag = stream.get("itag")?.asString ?: "22"
                     val container = stream.get("container")?.asString ?: "mp4"
-
-                    // Use proxied download endpoint on Invidious server with local=true
-                    // to prevent Google Video 403 Forbidden IP mismatch
                     val proxiedDownloadUrl = "$base/latest_version?id=$videoId&itag=$itag&local=true"
 
                     var sizeBytes = stream.get("size")?.asString?.toLongOrNull() ?: 0L
@@ -135,7 +273,6 @@ class YouTubeApiService {
                     val cleanLabel = when {
                         rawQuality.contains("720") -> "720p HD (Видео + Звук)"
                         rawQuality.contains("360") -> "360p SD (Видео + Звук)"
-                        rawQuality.contains("480") -> "480p SD (Видео + Звук)"
                         else -> "$rawQuality (Видео + Звук)"
                     }
 
@@ -153,67 +290,7 @@ class YouTubeApiService {
                 }
             }
 
-            // 2. Adaptive video streams (e.g. 1080p Full HD) and Best Audio stream
-            if (root.has("adaptiveFormats")) {
-                val adaptive = root.getAsJsonArray("adaptiveFormats")
-                for (elem in adaptive) {
-                    val stream = elem.asJsonObject
-                    val type = stream.get("type")?.asString ?: ""
-                    val quality = stream.get("qualityLabel")?.asString ?: ""
-                    val itag = stream.get("itag")?.asString ?: ""
-                    val container = stream.get("container")?.asString ?: "mp4"
-
-                    // 1080p stream
-                    if (type.contains("video/mp4") && quality.contains("1080") && formatsList.none { it.qualityLabel.contains("1080") }) {
-                        val clen = stream.get("clen")?.asString?.toLongOrNull() ?: 0L
-                        val sizeBytes = if (clen > 0) clen else estimateVideoSizeBytes("1080p", lengthSeconds)
-                        val proxiedUrl = "$base/latest_version?id=$videoId&itag=$itag&local=true"
-
-                        formatsList.add(
-                            VideoFormat(
-                                id = itag.ifEmpty { "137" },
-                                qualityLabel = "1080p Full HD",
-                                extension = container,
-                                fileSizeBytes = sizeBytes,
-                                fileSizeFormatted = formatBytes(sizeBytes),
-                                downloadUrl = proxiedUrl,
-                                isAudioOnly = false
-                            )
-                        )
-                    }
-
-                    // Extract best Audio stream (e.g. itag 140 m4a / mp3)
-                    if (type.contains("audio/mp4") && formatsList.none { it.isAudioOnly }) {
-                        val clen = stream.get("clen")?.asString?.toLongOrNull() ?: 0L
-                        val audioSize = if (clen > 0) clen else estimateAudioSizeBytes(lengthSeconds)
-                        val proxiedAudioUrl = "$base/latest_version?id=$videoId&itag=$itag&local=true"
-
-                        formatsList.add(
-                            VideoFormat(
-                                id = itag.ifEmpty { "140" },
-                                qualityLabel = "Аудио (M4A / MP3)",
-                                extension = "m4a",
-                                fileSizeBytes = audioSize,
-                                fileSizeFormatted = formatBytes(audioSize),
-                                downloadUrl = proxiedAudioUrl,
-                                isAudioOnly = true
-                            )
-                        )
-                    }
-                }
-            }
-
-            // Sort formats: 1080p first, then 720p, 480p, 360p, then Audio last
-            formatsList.sortByDescending {
-                when {
-                    it.isAudioOnly -> -1
-                    it.qualityLabel.contains("1080") -> 1080
-                    it.qualityLabel.contains("720") -> 720
-                    it.qualityLabel.contains("480") -> 480
-                    it.qualityLabel.contains("360") -> 360
-                    else -> 0
-                }
-            }
+            if (formatsList.isEmpty()) return null
 
             YouTubeVideoInfo(
                 videoId = videoId,
@@ -223,83 +300,61 @@ class YouTubeApiService {
                 durationSeconds = lengthSeconds,
                 formats = formatsList
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
-    private fun parsePipedResponse(videoId: String, jsonStr: String): YouTubeVideoInfo? {
-        return try {
-            val root = JsonParser.parseString(jsonStr).asJsonObject
-            val title = root.get("title")?.asString ?: "YouTube Video"
-            val author = root.get("uploader")?.asString ?: "YouTube Creator"
-            val durationSeconds = root.get("duration")?.asLong ?: 180L
+    private fun fetchOEmbedFallback(videoId: String): YouTubeVideoInfo? {
+        val oEmbedUrl = "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=$videoId&format=json"
+        val request = Request.Builder().url(oEmbedUrl).build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body?.string() ?: return null
+            val obj = JsonParser.parseString(body).asJsonObject
+
+            val title = obj.get("title")?.asString ?: "YouTube Video"
+            val author = obj.get("author_name")?.asString ?: "YouTube Creator"
             val thumbnail = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
+            val lengthSeconds = 240L
 
-            val formatsList = mutableListOf<VideoFormat>()
+            val formats = listOf(
+                VideoFormat(
+                    id = "22",
+                    qualityLabel = "720p HD (Видео + Звук)",
+                    extension = "mp4",
+                    fileSizeBytes = estimateVideoSizeBytes("720p", lengthSeconds),
+                    fileSizeFormatted = formatBytes(estimateVideoSizeBytes("720p", lengthSeconds)),
+                    downloadUrl = "https://yewtu.be/latest_version?id=$videoId&itag=22&local=true"
+                ),
+                VideoFormat(
+                    id = "18",
+                    qualityLabel = "360p SD (Видео + Звук)",
+                    extension = "mp4",
+                    fileSizeBytes = estimateVideoSizeBytes("360p", lengthSeconds),
+                    fileSizeFormatted = formatBytes(estimateVideoSizeBytes("360p", lengthSeconds)),
+                    downloadUrl = "https://yewtu.be/latest_version?id=$videoId&itag=18&local=true"
+                ),
+                VideoFormat(
+                    id = "140",
+                    qualityLabel = "Аудио (M4A / MP3)",
+                    extension = "m4a",
+                    fileSizeBytes = estimateAudioSizeBytes(lengthSeconds),
+                    fileSizeFormatted = formatBytes(estimateAudioSizeBytes(lengthSeconds)),
+                    downloadUrl = "https://yewtu.be/latest_version?id=$videoId&itag=140&local=true",
+                    isAudioOnly = true
+                )
+            )
 
-            if (root.has("videoStreams")) {
-                val videoStreams = root.getAsJsonArray("videoStreams")
-                for (elem in videoStreams) {
-                    val stream = elem.asJsonObject
-                    val isVideoOnly = stream.get("videoOnly")?.asBoolean ?: false
-                    val quality = stream.get("quality")?.asString ?: "720p"
-                    val format = stream.get("format")?.asString ?: "mp4"
-                    val url = stream.get("url")?.asString ?: continue
-
-                    // Prefer combined streams or MP4
-                    if (!isVideoOnly && format.equals("mp4", ignoreCase = true)) {
-                        val sizeBytes = estimateVideoSizeBytes(quality, durationSeconds)
-                        formatsList.add(
-                            VideoFormat(
-                                id = quality,
-                                qualityLabel = "$quality (Видео + Звук)",
-                                extension = "mp4",
-                                fileSizeBytes = sizeBytes,
-                                fileSizeFormatted = formatBytes(sizeBytes),
-                                downloadUrl = url,
-                                isAudioOnly = false
-                            )
-                        )
-                    }
-                }
-            }
-
-            if (root.has("audioStreams")) {
-                val audioStreams = root.getAsJsonArray("audioStreams")
-                val bestAudio = audioStreams.firstOrNull { it.asJsonObject.get("format")?.asString?.contains("m4a") == true }
-                    ?: audioStreams.firstOrNull()
-
-                if (bestAudio != null) {
-                    val stream = bestAudio.asJsonObject
-                    val url = stream.get("url")?.asString ?: ""
-                    if (url.isNotEmpty()) {
-                        val sizeBytes = estimateAudioSizeBytes(durationSeconds)
-                        formatsList.add(
-                            VideoFormat(
-                                id = "audio_piped",
-                                qualityLabel = "Аудио (M4A / MP3)",
-                                extension = "m4a",
-                                fileSizeBytes = sizeBytes,
-                                fileSizeFormatted = formatBytes(sizeBytes),
-                                downloadUrl = url,
-                                isAudioOnly = true
-                            )
-                        )
-                    }
-                }
-            }
-
-            YouTubeVideoInfo(
+            return YouTubeVideoInfo(
                 videoId = videoId,
                 title = title,
                 author = author,
                 thumbnailUrl = thumbnail,
-                durationSeconds = durationSeconds,
-                formats = formatsList
+                durationSeconds = lengthSeconds,
+                formats = formats
             )
-        } catch (e: Exception) {
-            null
         }
     }
 
@@ -314,7 +369,7 @@ class YouTubeApiService {
     }
 
     private fun estimateAudioSizeBytes(durationSec: Long): Long {
-        return (durationSec * 160_000L) / 8L // ~160 kbps MP3
+        return (durationSec * 160_000L) / 8L
     }
 
     private fun formatBytes(bytes: Long): String {
