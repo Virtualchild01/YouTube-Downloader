@@ -23,6 +23,7 @@ import com.example.ytdownloader.api.VideoFormat
 import com.example.ytdownloader.api.YouTubeApiService
 import com.example.ytdownloader.api.YouTubeVideoInfo
 import com.example.ytdownloader.databinding.ActivityMainBinding
+import com.example.ytdownloader.utils.DownloadUtil
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
@@ -297,7 +298,8 @@ class MainActivity : AppCompatActivity() {
         request.addOption("--no-mtime")
         request.addOption("--no-playlist")
         request.addOption("--no-update")
-        request.addOption("--extractor-args", "youtube:player_client=android")
+        request.addOption("--extractor-args", "youtube:player_client=android,ios,mweb")
+        request.addOption("--geo-bypass")
         request.addOption("--user-agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
 
         if (format.isAudioOnly) {
@@ -333,12 +335,44 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Видео успешно сохранено в Загрузки!", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
+                // If local engine is challenged by YouTube anti-bot, seamlessly fallback to cloud tunnel
                 runOnUiThread {
-                    binding.progressIndicator.visibility = View.GONE
-                    binding.btnDownloadSelected.isEnabled = true
-                    val err = e.message ?: "Ошибка скачивания"
-                    binding.tvStatus.text = "Ошибка: $err"
-                    Toast.makeText(this@MainActivity, "Ошибка: $err", Toast.LENGTH_LONG).show()
+                    binding.tvStatus.text = "Защита YouTube активна. Переключение на облачный туннель..."
+                }
+
+                val resolveResult = apiService.resolveDownloadUrl(video.videoId, format)
+                resolveResult.onSuccess { directUrl ->
+                    try {
+                        DownloadUtil.enqueueDownload(
+                            context = this@MainActivity,
+                            url = directUrl,
+                            title = video.title,
+                            quality = format.qualityLabel,
+                            extension = format.extension
+                        )
+                        runOnUiThread {
+                            binding.progressIndicator.visibility = View.GONE
+                            binding.btnDownloadSelected.isEnabled = true
+                            binding.tvStatus.text = "Скачивание через туннель началось! Файл в Загрузках."
+                            Toast.makeText(this@MainActivity, "Скачивание запущено через облачный туннель!", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (ex: Exception) {
+                        runOnUiThread {
+                            binding.progressIndicator.visibility = View.GONE
+                            binding.btnDownloadSelected.isEnabled = true
+                            val err = ex.message ?: "Ошибка"
+                            binding.tvStatus.text = "Ошибка: $err"
+                            Toast.makeText(this@MainActivity, "Ошибка: $err", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.onFailure { tunnelError ->
+                    runOnUiThread {
+                        binding.progressIndicator.visibility = View.GONE
+                        binding.btnDownloadSelected.isEnabled = true
+                        val err = e.message ?: tunnelError.message ?: "Ошибка скачивания"
+                        binding.tvStatus.text = "Ошибка: $err"
+                        Toast.makeText(this@MainActivity, "Ошибка: $err", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
