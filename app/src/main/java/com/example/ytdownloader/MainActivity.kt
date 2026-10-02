@@ -279,20 +279,34 @@ class MainActivity : AppCompatActivity() {
         val video = currentVideoInfo ?: return
         val format = selectedFormat ?: return
 
-        try {
-            DownloadUtil.enqueueDownload(
-                context = this,
-                url = format.downloadUrl,
-                title = video.title,
-                quality = format.qualityLabel,
-                extension = format.extension
-            )
+        binding.progressIndicator.visibility = View.VISIBLE
+        binding.btnDownloadSelected.isEnabled = false
+        binding.tvStatus.text = "Подготовка файла к скачиванию..."
 
-            binding.tvStatus.text = getString(R.string.status_success)
-            Toast.makeText(this, "Скачивание началось! Файл будет в папке «Загрузки»", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            binding.tvStatus.text = getString(R.string.error_download_failed)
-            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val resolveResult = apiService.resolveDownloadUrl(video.videoId, format)
+            binding.progressIndicator.visibility = View.GONE
+            binding.btnDownloadSelected.isEnabled = true
+
+            resolveResult.onSuccess { directUrl ->
+                try {
+                    DownloadUtil.enqueueDownload(
+                        context = this@MainActivity,
+                        url = directUrl,
+                        title = video.title,
+                        quality = format.qualityLabel,
+                        extension = format.extension
+                    )
+                    binding.tvStatus.text = getString(R.string.status_success)
+                    Toast.makeText(this@MainActivity, "Скачивание началось! Файл будет в папке «Загрузки»", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    binding.tvStatus.text = getString(R.string.error_download_failed)
+                    Toast.makeText(this@MainActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }.onFailure { error ->
+                binding.tvStatus.text = error.message ?: getString(R.string.error_download_failed)
+                Toast.makeText(this@MainActivity, error.message ?: "Ошибка получения ссылки", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
