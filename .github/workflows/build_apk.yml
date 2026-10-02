@@ -16,6 +16,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Автоматический перенос файлов в корень, если проект загружен внутри папки YTDownloader
+      - name: Check and adjust project structure
+        run: |
+          if [ -d "YTDownloader" ] && [ ! -f "build.gradle.kts" ]; then
+            echo "Moving files from YTDownloader subdirectory to root..."
+            shopt -s dotglob
+            mv YTDownloader/* .
+          fi
+          ls -la
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -23,12 +33,13 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.5
+          gradle-version: '8.4'
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: |
+          gradle assembleDebug --stacktrace --no-daemon -PversionCode=${{ github.run_number }}
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4

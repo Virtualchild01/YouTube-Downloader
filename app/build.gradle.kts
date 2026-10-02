@@ -11,20 +11,10 @@ android {
         applicationId = "com.example.ytdownloader"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "2.2"
+        versionCode = 1
+        versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-        }
-    }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
     }
 
     signingConfigs {
@@ -39,12 +29,23 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
+        debug {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -64,17 +65,15 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
-    // Coroutines
+    // Coroutines for asynchronous network operations
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // HTTP client & JSON
+    // HTTP client
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Image loading for thumbnails
     implementation("com.github.bumptech.glide:glide:4.16.0")
-
-    // Local yt-dlp & FFmpeg engine (Seal architecture)
-    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
-    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 }

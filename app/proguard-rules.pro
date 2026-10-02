@@ -1,5 +1,5 @@
-# Keep youtubedl-android and ffmpeg
--keep class com.yausername.** { *; }
--keep class io.github.junkfood02.** { *; }
--dontwarn com.yausername.**
--dontwarn io.github.junkfood02.**
+# ProGuard rules for YTDownloader
+-keep class com.example.ytdownloader.api.** { *; }
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
