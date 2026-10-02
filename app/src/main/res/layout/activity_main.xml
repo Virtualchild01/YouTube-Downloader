@@ -1,0 +1,487 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <!-- Scrollable Content Area -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@id/bottomThemeBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="24dp">
+
+            <!-- Minimalist App Header with Logo and Support Heart -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/ivAppLogo"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@mipmap/ic_launcher_round"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.YTDownloader.Pill" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvAppTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/title_main"
+                        android:textColor="@color/on_surface"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvAppSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/subtitle_main"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSupportHeader"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/btn_support_developer"
+                    app:icon="@drawable/ic_heart"
+                    app:iconSize="24dp"
+                    app:iconTint="@color/primary" />
+            </LinearLayout>
+
+            <!-- Main Input Card (Minimalist & Rounded) -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/card_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <!-- Input Field with Quick Paste Button side-by-side -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/tilUrl"
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="@string/hint_enter_url"
+                            app:boxCornerRadiusBottomEnd="20dp"
+                            app:boxCornerRadiusBottomStart="20dp"
+                            app:boxCornerRadiusTopEnd="20dp"
+                            app:boxCornerRadiusTopStart="20dp"
+                            app:boxStrokeColor="@color/primary"
+                            app:endIconMode="clear_text"
+                            app:hintTextColor="@color/primary">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etUrl"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textUri"
+                                android:maxLines="2"
+                                android:paddingVertical="14dp"
+                                android:textColor="@color/on_surface"
+                                android:textSize="14sp" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Quick Paste Button directly next to the input field -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPaste"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="56dp"
+                            android:layout_marginStart="10dp"
+                            android:text="@string/btn_paste"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            app:backgroundTint="@color/surface_variant"
+                            app:cornerRadius="20dp" />
+                    </LinearLayout>
+
+                    <!-- Fetch / Quick Download Action Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnFetch"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/btn_download"
+                        android:textColor="@color/on_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/primary"
+                        app:cornerRadius="28dp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Loading & Status Section -->
+            <LinearLayout
+                android:id="@+id/layoutStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/progressIndicator"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    app:indicatorColor="@color/primary"
+                    app:trackColor="@color/surface_variant"
+                    app:trackCornerRadius="4dp" />
+
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="@string/status_ready"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Video Preview & Format Selector Card (Initially Hidden) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/card_stroke"
+                app:strokeWidth="1dp"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivCover"
+                        android:layout_width="match_parent"
+                        android:layout_height="210dp"
+                        android:background="@color/surface_variant"
+                        android:contentDescription="Video Thumbnail"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.YTDownloader.Input" />
+
+                    <TextView
+                        android:id="@+id/tvAuthor"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:textColor="@color/primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="YouTube Channel Name" />
+
+                    <TextView
+                        android:id="@+id/tvVideoTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="3"
+                        android:textColor="@color/on_surface"
+                        android:textSize="14sp"
+                        tools:text="Sample YouTube Video Title with detailed description" />
+
+                    <!-- Quality & File Size Selector Dropdown -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/label_select_quality"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilQuality"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        app:boxCornerRadiusBottomEnd="18dp"
+                        app:boxCornerRadiusBottomStart="18dp"
+                        app:boxCornerRadiusTopEnd="18dp"
+                        app:boxCornerRadiusTopStart="18dp"
+                        app:boxStrokeColor="@color/primary">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/actvQuality"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:paddingVertical="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp"
+                            tools:text="1080p Full HD (~75.4 МБ)" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Main Download Button for Selected Quality -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDownloadSelected"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="14dp"
+                        android:text="@string/btn_download"
+                        android:textColor="@color/on_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/primary"
+                        app:cornerRadius="27dp" />
+
+                    <!-- Action Buttons: Open in Gallery & Share -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnViewVideo"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_open_gallery"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            app:backgroundTint="@color/surface_variant"
+                            app:cornerRadius="20dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnShare"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_share"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            app:backgroundTint="@color/surface_variant"
+                            app:cornerRadius="20dp" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Support Developer Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSupport"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/card_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_heart"
+                        app:tint="@color/primary" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/btn_support_developer"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/support_card_subtitle"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSupport"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="@string/support_dialog_btn_support"
+                        android:textColor="@color/primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/surface_variant"
+                        app:cornerRadius="20dp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom Theme Switcher Bar (Minimalist & Rounded) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/bottomThemeBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:strokeColor="@color/card_stroke"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="14dp">
+
+            <TextView
+                android:id="@+id/tvThemeTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="@string/theme_title"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <!-- Theme Toggle Group: Auto / Dark / Light -->
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/toggleThemeGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnThemeAuto"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/theme_auto"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    app:cornerRadius="20dp"
+                    app:strokeColor="@color/card_stroke" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnThemeDark"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/theme_dark"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    app:cornerRadius="20dp"
+                    app:strokeColor="@color/card_stroke" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnThemeLight"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/theme_light"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    app:cornerRadius="20dp"
+                    app:strokeColor="@color/card_stroke" />
+
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

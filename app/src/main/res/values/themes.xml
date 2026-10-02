@@ -1,0 +1,27 @@
+<resources>
+    <style name="Theme.YTDownloader" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Brand Colors -->
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="colorSecondary">@color/secondary</item>
+        <item name="colorOnSecondary">@color/on_secondary</item>
+
+        <!-- Status & Navigation Bar -->
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+    </style>
+
+    <!-- Rounded Button Shape -->
+    <style name="ShapeAppearance.YTDownloader.Pill" parent="ShapeAppearance.Material3.Corner.Full">
+        <item name="cornerSize">28dp</item>
+    </style>
+
+    <style name="ShapeAppearance.YTDownloader.Card" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="ShapeAppearance.YTDownloader.Input" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">20dp</item>
+    </style>
+</resources>

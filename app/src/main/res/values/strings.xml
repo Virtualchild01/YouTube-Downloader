@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">YTDownloader</string>
+    <string name="title_main">YouTube Downloader</string>
+    <string name="subtitle_main">Скачивание видео и аудио в любом качестве</string>
+    <string name="hint_enter_url">Ссылка на YouTube или Shorts</string>
+    <string name="btn_paste">Вставить</string>
+    <string name="btn_clear">Очистить</string>
+    <string name="btn_download">Скачать видео</string>
+    <string name="btn_open_gallery">В галерею</string>
+    <string name="btn_share">Поделиться</string>
+    <string name="label_select_quality">Выберите качество и размер:</string>
+    <string name="theme_title">Тема приложения</string>
+    <string name="theme_auto">Авто</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="status_ready">Вставьте ссылку, чтобы получить информацию о видео</string>
+    <string name="status_fetching_info">Получение информации о видео и форматах...</string>
+    <string name="status_downloading">Скачивание файла началось...</string>
+    <string name="status_success">Видео скачивается и будет сохранено в «Загрузки»!</string>
+    <string name="error_invalid_url">Введите корректную ссылку на YouTube видео или Shorts</string>
+    <string name="error_fetch_failed">Не удалось получить данные о видео. Проверьте ссылку.</string>
+    <string name="error_download_failed">Ошибка при отправке в загрузки</string>
+    <string name="permission_denied">Для сохранения требуется доступ к хранилищу</string>
+    <string name="btn_support_developer">Поддержать разработчика</string>
+    <string name="support_card_subtitle">Бесплатно и без рекламы</string>
+    <string name="support_dialog_title">Поддержка разработчика ❤️</string>
+    <string name="support_dialog_message">Приложение полностью бесплатное и без рекламы. Всё сделано для Вашего удобства, чтобы не засорять приложение всяким хламом.\n\nНо вы можете поддержать разработчика, в будущем это даст мотивацию на создание новых проектов, спасибо :)</string>
+    <string name="support_dialog_btn_support">Поддержать</string>
+    <string name="support_dialog_btn_close">Закрыть</string>
+</resources>
