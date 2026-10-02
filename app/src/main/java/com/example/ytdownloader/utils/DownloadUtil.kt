@@ -20,7 +20,8 @@ object DownloadUtil {
     ): Long {
         val sanitizedTitle = sanitizeFilename(title)
         val ext = if (extension.startsWith(".")) extension else ".$extension"
-        val fileName = "${sanitizedTitle}_${quality.replace(" ", "_")}$ext"
+        val cleanQuality = quality.replace(Regex("[^a-zA-Z0-9а-яА-ЯёЁ]"), "_")
+        val fileName = "${sanitizedTitle}_$cleanQuality$ext"
 
         val request = DownloadManager.Request(Uri.parse(url)).apply {
             setTitle(title)
@@ -29,6 +30,9 @@ object DownloadUtil {
             setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
             setAllowedOverMetered(true)
             setAllowedOverRoaming(true)
+            setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
+            addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+            addRequestHeader("Accept", "*/*")
         }
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
