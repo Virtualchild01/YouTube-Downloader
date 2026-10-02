@@ -16,19 +16,41 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Автоматический перенос файлов в корень, если проект загружен внутри папки YTDownloader
+      - name: Check and adjust project structure
+        run: |
+          if [ -d "YTDownloader" ] && [ ! -f "build.gradle.kts" ]; then
+            echo "Moving files from YTDownloader subdirectory to root..."
+            shopt -s dotglob
+            mv YTDownloader/* .
+          fi
+          ls -la
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+
+      # Постоянный ключ подписи (гарантирует установку обновления поверх старого приложения)
+      - name: Setup Persistent Signing Keystore
+        run: |
+          mkdir -p ~/.android
+          echo "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" | base64 -d > ~/.android/debug.keystore
 
       - name: Build Debug APK
         run: |
-          gradle assembleDebug --stacktrace
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug -PversionCode=${{ github.run_number }}
+          else
+            gradle assembleDebug -PversionCode=${{ github.run_number }}
+          fi
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
