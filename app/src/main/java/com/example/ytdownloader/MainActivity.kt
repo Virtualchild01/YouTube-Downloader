@@ -79,6 +79,9 @@ class MainActivity : AppCompatActivity() {
             try {
                 YoutubeDL.getInstance().init(applicationContext)
                 FFmpeg.getInstance().init(applicationContext)
+                try {
+                    YoutubeDL.getInstance().updateYoutubeDL(applicationContext)
+                } catch (_: Exception) {}
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -293,13 +296,16 @@ class MainActivity : AppCompatActivity() {
         request.addOption("-o", "${targetDir.absolutePath}/$sanitizedTitle.%(ext)s")
         request.addOption("--no-mtime")
         request.addOption("--no-playlist")
+        request.addOption("--no-update")
+        request.addOption("--extractor-args", "youtube:player_client=android")
+        request.addOption("--user-agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
 
         if (format.isAudioOnly) {
             request.addOption("-x")
             request.addOption("--audio-format", "mp3")
         } else {
             val q = format.id.filter { it.isDigit() }.ifEmpty { "720" }
-            request.addOption("-f", "bestvideo[height<=$q][ext=mp4]+bestaudio[ext=m4a]/best[height<=$q][ext=mp4]/best")
+            request.addOption("-f", "b[height<=$q]/bestvideo[height<=$q]+bestaudio/best[height<=$q]/best")
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
