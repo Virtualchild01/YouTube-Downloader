@@ -778,6 +778,7 @@ class MainActivity : AppCompatActivity() {
                     binding.tvStatus.text = displayMsg
                     Toast.makeText(this@MainActivity, displayMsg, Toast.LENGTH_LONG).show()
 
+                        completeDownloadNotification(
                         title = "Ошибка загрузки",
                         text = displayMsg
                     )
