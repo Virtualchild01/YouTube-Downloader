@@ -622,12 +622,12 @@ class MainActivity : AppCompatActivity() {
     private fun estimateSizeFormatted(quality: String, durationSec: Long): String {
         if (durationSec <= 0) return ""
         val bitrateBps = when {
-            quality.contains("1080") -> 3_500_000L
-            quality.contains("720") -> 2_000_000L
-            quality.contains("480") -> 1_000_000L
-            quality.contains("360") -> 600_000L
-            quality.contains("MP3") -> 160_000L
-            else -> 1_500_000L
+            quality.contains("1080") -> 2_100_000L
+            quality.contains("720") -> 1_180_000L
+            quality.contains("480") -> 600_000L
+            quality.contains("360") -> 335_000L
+            quality.contains("MP3") -> 130_000L
+            else -> 1_000_000L
         }
         val bytes = (durationSec * bitrateBps) / 8L
         val mb = bytes / (1024.0 * 1024.0)
