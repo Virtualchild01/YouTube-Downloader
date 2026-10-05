@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -582,7 +582,7 @@ class MainActivity : AppCompatActivity() {
                 .into(binding.ivCover)
         }
 
-        val durationSec = info.duration.toLong()
+        val durationSec = (info.duration ?: 0).toLong()
         val optionsWithSizes = QUALITY_OPTIONS.map { quality ->
             val estSize = estimateSizeFormatted(quality, durationSec)
             if (estSize.isNotEmpty()) "$quality ($estSize)" else quality
@@ -737,7 +737,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     updateDownloadNotification(
-                        title = video.title.take(40),
+                        title = (video.title ?: "Видео").take(40),
                         text = progressText,
                         progress = progress.toInt()
                     )
@@ -751,7 +751,7 @@ class MainActivity : AppCompatActivity() {
 
                     completeDownloadNotification(
                         title = "Загрузка завершена!",
-                        text = "${video.title.take(40)} сохранено в Загрузки"
+                        text = "${(video.title ?: \"Видео\").take(40)} сохранено в Загрузки"
                     )
 
                     MediaScannerConnection.scanFile(
