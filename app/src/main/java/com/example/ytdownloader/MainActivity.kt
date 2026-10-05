@@ -367,7 +367,7 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds ->
+                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, _ ->
                     runOnUiThread {
                         binding.progressIndicator.isIndeterminate = false
                         binding.progressIndicator.progress = progress.toInt()
