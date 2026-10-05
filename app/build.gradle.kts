@@ -12,12 +12,12 @@ android {
         minSdk = 24
         targetSdk = 34
         // Автоматическое повышение версии при каждой сборке на GitHub Actions
-        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 3
-        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "3"}"
+        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 24
+        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "24"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Оптимизация размера: только современная 64-битная архитектура смартфонов (~35 МБ вместо 190 МБ)
+        // Оптимизация размера: только современная 64-битная архитектура смартфонов (~35 МБ)
         ndk {
             abiFilters.add("arm64-v8a")
         }

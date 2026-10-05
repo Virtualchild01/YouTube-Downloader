@@ -2,6 +2,8 @@ package com.example.ytdownloader
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -14,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -31,6 +34,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
@@ -40,7 +44,9 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.mapper.VideoInfo
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -52,6 +58,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SharedPreferences
 
+    // Независимый от жизненного цикла Activity скоуп для фоновой загрузки (не сбрасывается при сворачивании)
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private var currentVideoInfo: VideoInfo? = null
     private var currentUrl: String? = null
     private var selectedQuality: String = "720p HD"
@@ -62,6 +71,9 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "yt_downloader_prefs"
         private const val KEY_THEME = "key_theme_mode"
         private const val COOKIES_FILE_NAME = "youtube_cookies.txt"
+
+        private const val CHANNEL_ID = "yt_downloader_channel"
+        private const val NOTIFICATION_ID = 1001
 
         private const val THEME_AUTO = 0
         private const val THEME_DARK = 1
@@ -97,12 +109,12 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        createNotificationChannel()
         initEngineAsync()
         setupThemeToggle()
         setupListeners()
         updateUiAuthState()
 
-        // Если пользователь ещё не авторизован, автоматически открываем окно входа
         if (!isUserAuthorized()) {
             binding.root.postDelayed({
                 showYouTubeLoginDialog()
@@ -117,6 +129,53 @@ class MainActivity : AppCompatActivity() {
         intent?.let { handleIncomingIntent(it) }
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Загрузка видео",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Прогресс скачивания видео в фоновом режиме"
+                setSound(null, null)
+                enableVibration(false)
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun updateDownloadNotification(title: String, text: String, progress: Int) {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(100, progress, false)
+
+            notificationManager.notify(NOTIFICATION_ID, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    private fun completeDownloadNotification(title: String, text: String) {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setOngoing(false)
+
+            notificationManager.notify(NOTIFICATION_ID, builder.build())
+        } catch (_: Exception) {}
+    }
+
     private fun initEngineAsync() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -124,7 +183,6 @@ class MainActivity : AppCompatActivity() {
                 isYtDlInitialized = true
                 Log.d(TAG, "YoutubeDL engine initialized")
 
-                // Фоновое обновление yt-dlp при наличии сети
                 try {
                     YoutubeDL.getInstance().updateYoutubeDL(applicationContext)
                 } catch (_: Exception) {}
@@ -181,9 +239,6 @@ class MainActivity : AppCompatActivity() {
         return cookiesFile.exists() && cookiesFile.length() > 50
     }
 
-    /**
-     * Блокирует ввод и скачивание до тех пор, пока пользователь не авторизуется.
-     */
     private fun updateUiAuthState() {
         val isAuth = isUserAuthorized()
         binding.etUrl.isEnabled = isAuth
@@ -204,7 +259,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Кнопка входа / управления аккаунтом
         binding.btnAccount.setOnClickListener {
             if (isUserAuthorized()) {
                 showAccountOptionsDialog()
@@ -213,7 +267,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Быстрая вставка из буфера обмена
         binding.btnPaste.setOnClickListener {
             if (!isUserAuthorized()) {
                 Toast.makeText(this, "Пожалуйста, сначала выполните вход в аккаунт", Toast.LENGTH_SHORT).show()
@@ -231,7 +284,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Кнопка поиска информации о видео
         binding.btnFetch.setOnClickListener {
             if (!isUserAuthorized()) {
                 Toast.makeText(this, "Пожалуйста, сначала выполните вход в аккаунт", Toast.LENGTH_SHORT).show()
@@ -246,17 +298,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Подтверждение скачивания
         binding.btnDownloadSelected.setOnClickListener {
             checkPermissionsAndDownload()
         }
 
-        // Открыть папку «Загрузки»
         binding.btnViewVideo.setOnClickListener {
             openDownloadsFolder()
         }
 
-        // Поделиться ссылкой на видео
         binding.btnShare.setOnClickListener {
             val url = currentUrl ?: return@setOnClickListener
             val video = currentVideoInfo
@@ -268,7 +317,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent.createChooser(shareIntent, "Поделиться видео"))
         }
 
-        // Поддержка разработчика
         binding.btnSupport.setOnClickListener {
             showSupportDialog()
         }
@@ -281,13 +329,15 @@ class MainActivity : AppCompatActivity() {
     private fun showYouTubeLoginDialog() {
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
 
+        // Флаг для предотвращения спама уведомлений
+        var isAuthHandled = false
+
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#121212"))
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
 
-        // Верхняя панель диалога с кнопками «Закрыть» и «Я вошёл (Готово)»
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -339,6 +389,59 @@ class MainActivity : AppCompatActivity() {
         cookieManager.setAcceptCookie(true)
         cookieManager.setAcceptThirdPartyCookies(webView, true)
 
+        fun trySaveAndFinish(silent: Boolean): Boolean {
+            val ytCookies = cookieManager.getCookie("https://www.youtube.com") ?: ""
+            val googleCookies = cookieManager.getCookie("https://google.com") ?: ""
+            val accountsCookies = cookieManager.getCookie("https://accounts.google.com") ?: ""
+
+            val combined = "$ytCookies; $googleCookies; $accountsCookies"
+
+            val hasAuth = combined.contains("LOGIN_INFO") ||
+                    combined.contains("SID") ||
+                    combined.contains("SSID") ||
+                    combined.contains("SAPISID") ||
+                    combined.contains("__Secure-3PAPISID")
+
+            if (hasAuth) {
+                if (!isAuthHandled) {
+                    isAuthHandled = true
+                    val cookiesFile = File(filesDir, COOKIES_FILE_NAME)
+                    val sb = StringBuilder()
+                    sb.append("# Netscape HTTP Cookie File\n")
+                    sb.append("# Generated by YTDownloader\n\n")
+
+                    val addedNames = mutableSetOf<String>()
+                    for (raw in listOf(ytCookies, googleCookies, accountsCookies)) {
+                        for (item in raw.split(";")) {
+                            val part = item.trim()
+                            val eqIdx = part.indexOf('=')
+                            if (eqIdx > 0) {
+                                val name = part.substring(0, eqIdx).trim()
+                                val value = part.substring(eqIdx + 1).trim()
+                                if (name.isNotEmpty() && addedNames.add(name)) {
+                                    sb.append(".youtube.com\tTRUE\t/\tTRUE\t2147483647\t").append(name).append("\t").append(value).append("\n")
+                                    sb.append(".google.com\tTRUE\t/\tTRUE\t2147483647\t").append(name).append("\t").append(value).append("\n")
+                                }
+                            }
+                        }
+                    }
+
+                    cookiesFile.writeText(sb.toString())
+                    runOnUiThread {
+                        updateUiAuthState()
+                        dialog.dismiss()
+                        Toast.makeText(this@MainActivity, "Авторизация в YouTube сохранена!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                return true
+            }
+
+            if (!silent) {
+                Toast.makeText(this@MainActivity, "Куки ещё не получены. Завершите вход на открывшейся странице.", Toast.LENGTH_SHORT).show()
+            }
+            return false
+        }
+
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -349,84 +452,26 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                // Автоматическая проверка куки при окончании загрузки любой страницы
-                trySaveCookiesAndFinish(dialog, silent = true)
+                trySaveAndFinish(silent = true)
             }
         }
 
         doneBtn.setOnClickListener {
-            // Ручное подтверждение сохранения куки по кнопке «Я вошёл»
-            val success = trySaveCookiesAndFinish(dialog, silent = false)
-            if (!success) {
-                Toast.makeText(this, "Куки ещё не получены. Завершите вход на открывшейся странице.", Toast.LENGTH_SHORT).show()
-            }
+            trySaveAndFinish(silent = false)
         }
 
         rootLayout.addView(topBar)
         rootLayout.addView(webView)
         dialog.setContentView(rootLayout)
 
-        // Стартуем с прямой мобильной страницы YouTube (где есть кнопка профиля / входа)
         webView.loadUrl("https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fm.youtube.com%2F")
         dialog.show()
-    }
-
-    private fun trySaveCookiesAndFinish(dialog: android.app.Dialog, silent: Boolean): Boolean {
-        val cookieManager = CookieManager.getInstance()
-        val ytCookies = cookieManager.getCookie("https://www.youtube.com") ?: ""
-        val googleCookies = cookieManager.getCookie("https://google.com") ?: ""
-        val accountsCookies = cookieManager.getCookie("https://accounts.google.com") ?: ""
-
-        val combined = "$ytCookies; $googleCookies; $accountsCookies"
-
-        // Проверяем наличие ключевых маркеров авторизованной сессии Google/YouTube
-        val hasAuth = combined.contains("LOGIN_INFO") ||
-                combined.contains("SID") ||
-                combined.contains("SSID") ||
-                combined.contains("SAPISID") ||
-                combined.contains("__Secure-3PAPISID")
-
-        if (hasAuth) {
-            val cookiesFile = File(filesDir, COOKIES_FILE_NAME)
-            val sb = StringBuilder()
-            sb.append("# Netscape HTTP Cookie File\n")
-            sb.append("# Generated by YTDownloader\n\n")
-
-            val addedNames = mutableSetOf<String>()
-            for (raw in listOf(ytCookies, googleCookies, accountsCookies)) {
-                for (item in raw.split(";")) {
-                    val part = item.trim()
-                    val eqIdx = part.indexOf('=')
-                    if (eqIdx > 0) {
-                        val name = part.substring(0, eqIdx).trim()
-                        val value = part.substring(eqIdx + 1).trim()
-                        if (name.isNotEmpty() && addedNames.add(name)) {
-                            sb.append(".youtube.com\tTRUE\t/\tTRUE\t2147483647\t").append(name).append("\t").append(value).append("\n")
-                            sb.append(".google.com\tTRUE\t/\tTRUE\t2147483647\t").append(name).append("\t").append(value).append("\n")
-                        }
-                    }
-                }
-            }
-
-            cookiesFile.writeText(sb.toString())
-            runOnUiThread {
-                updateUiAuthState()
-                dialog.dismiss()
-                Toast.makeText(this@MainActivity, "Авторизация в YouTube сохранена! Ограничения 403 и SABR сняты.", Toast.LENGTH_LONG).show()
-            }
-            return true
-        }
-
-        if (!silent) {
-            return false
-        }
-        return false
     }
 
     private fun showAccountOptionsDialog() {
         MaterialAlertDialogBuilder(this)
             .setTitle("YouTube Аккаунт")
-            .setMessage("Вы успешно авторизованы в YouTube. Куки активны: ошибки 403 и SABR устранены, скачивание работает без ограничений.")
+            .setMessage("Вы успешно авторизованы в YouTube. Куки активны, скачивание работает без ограничений.")
             .setIcon(R.drawable.ic_heart)
             .setPositiveButton("ОК", null)
             .setNeutralButton("Выйти") { _, _ ->
@@ -508,23 +553,21 @@ class MainActivity : AppCompatActivity() {
                     binding.progressIndicator.visibility = View.GONE
                     binding.btnFetch.isEnabled = true
                     val err = e.message ?: "Не удалось получить информацию"
-                    val userMsg = if (err.contains("timeout", ignoreCase = true) || err.contains("connect", ignoreCase = true)) {
-                        "Тайм-аут подключения. Убедитесь, что включен VPN."
-                    } else if (err.contains("403", ignoreCase = true) || err.contains("SABR", ignoreCase = true)) {
-                        "YouTube отклонил запрос (403). Нажмите «Войти» вверху для обновления авторизации."
+                    val cleanLines = err.lines().filter { it.isNotBlank() && !it.startsWith("Usage:") }
+                    val cleanErr = cleanLines.find { it.startsWith("ERROR:") || it.startsWith("yt-dlp: error:") }
+                        ?: cleanLines.firstOrNull() ?: err
+                    val displayMsg = if (cleanErr.contains("403") || cleanErr.contains("SABR")) {
+                        "YouTube отклонил запрос (403). Нажмите «Аккаунт» для повторного входа."
                     } else {
-                        "Ошибка: $err"
+                        cleanErr
                     }
-                    binding.tvStatus.text = userMsg
-                    Toast.makeText(this@MainActivity, userMsg, Toast.LENGTH_LONG).show()
+                    binding.tvStatus.text = displayMsg
+                    Toast.makeText(this@MainActivity, displayMsg, Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
 
-    /**
-     * Отображает карточку видео и вычисляет примерный размер для каждого качества.
-     */
     private fun displayVideoPreview(info: VideoInfo) {
         binding.cardPreview.visibility = View.VISIBLE
         binding.tvAuthor.text = info.uploader ?: "YouTube"
@@ -588,27 +631,33 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startDownloadProcess()
-        } else {
-            val neededPermissions = mutableListOf<String>()
+        val neededPermissions = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 neededPermissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 neededPermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
+        }
 
-            if (neededPermissions.isNotEmpty()) {
-                requestPermissionLauncher.launch(neededPermissions.toTypedArray())
-            } else {
-                startDownloadProcess()
-            }
+        if (neededPermissions.isNotEmpty()) {
+            requestPermissionLauncher.launch(neededPermissions.toTypedArray())
+        } else {
+            startDownloadProcess()
         }
     }
 
     private fun startDownloadProcess() {
         val url = currentUrl ?: return
+        val video = currentVideoInfo ?: return
         val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!downloadDir.exists()) downloadDir.mkdirs()
 
@@ -616,7 +665,7 @@ class MainActivity : AppCompatActivity() {
         binding.progressIndicator.progress = 0
         binding.progressIndicator.visibility = View.VISIBLE
         binding.btnDownloadSelected.isEnabled = false
-        binding.tvStatus.text = "Подготовка к скачиванию..."
+        binding.tvStatus.text = "Скачивание видео: 0%"
 
         val processId = "yt_dl_${System.currentTimeMillis()}"
 
@@ -625,7 +674,7 @@ class MainActivity : AppCompatActivity() {
         request.addOption("--no-mtime")
         request.addOption("--no-playlist")
         request.addOption("--no-check-certificate")
-                request.addOption("-4")
+        request.addOption("-4")
         request.addOption("--extractor-args", "youtube:player_client=default,ios")
 
         val cookiesFile = File(filesDir, COOKIES_FILE_NAME)
@@ -646,16 +695,52 @@ class MainActivity : AppCompatActivity() {
             else -> request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
+        // Запуск через независимый скоуп с удержанием процессора (WakeLock), чтобы скачивание не прерывалось при сворачивании
+        downloadScope.launch {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "YTDownloader:DownloadWakeLock")
+            wakeLock.acquire(20 * 60 * 1000L) // до 20 минут активности в фоне
+
+            var isAudioStage = false
+            var lastProgress = 0f
+
             try {
-                // 3 параметра: progress, etaInSeconds, _
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, _ ->
+                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                    val rawLine = line ?: ""
+                    if (rawLine.contains(".m4a", ignoreCase = true) ||
+                        rawLine.contains(".mp3", ignoreCase = true) ||
+                        rawLine.contains("audio", ignoreCase = true) ||
+                        (lastProgress > 75f && progress < 25f)) {
+                        isAudioStage = true
+                    }
+                    lastProgress = progress
+
+                    val stageName = if (selectedQuality == "Аудио (MP3)") {
+                        "Скачивание аудио"
+                    } else if (isAudioStage) {
+                        if (progress >= 99f) "Объединение видео и аудио (FFmpeg)..." else "Скачивание аудио"
+                    } else {
+                        "Скачивание видео"
+                    }
+
+                    val etaStr = if (etaInSeconds > 0) " (~${etaInSeconds}с)" else ""
+                    val progressText = if (stageName.startsWith("Объединение")) {
+                        stageName
+                    } else {
+                        "$stageName: ${progress.toInt()}%$etaStr"
+                    }
+
                     runOnUiThread {
                         binding.progressIndicator.isIndeterminate = false
                         binding.progressIndicator.progress = progress.toInt()
-                        val etaStr = if (etaInSeconds > 0) " (осталось ~${etaInSeconds}с)" else ""
-                        binding.tvStatus.text = "Скачивание: ${progress.toInt()}%$etaStr"
+                        binding.tvStatus.text = progressText
                     }
+
+                    updateDownloadNotification(
+                        title = video.title.take(40),
+                        text = progressText,
+                        progress = progress.toInt()
+                    )
                 }
 
                 withContext(Dispatchers.Main) {
@@ -663,6 +748,11 @@ class MainActivity : AppCompatActivity() {
                     binding.btnDownloadSelected.isEnabled = true
                     binding.tvStatus.text = "Готово! Файл сохранён в «Загрузки»"
                     Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
+
+                    completeDownloadNotification(
+                        title = "Загрузка завершена!",
+                        text = "${video.title.take(40)} сохранено в Загрузки"
+                    )
 
                     MediaScannerConnection.scanFile(
                         this@MainActivity,
@@ -676,13 +766,25 @@ class MainActivity : AppCompatActivity() {
                     binding.progressIndicator.visibility = View.GONE
                     binding.btnDownloadSelected.isEnabled = true
                     val err = e.message ?: "Ошибка скачивания"
-                    val userMsg = if (err.contains("403", ignoreCase = true) || err.contains("SABR", ignoreCase = true)) {
-                        "YouTube отклонил запрос (403). Нажмите «Войти» вверху для обновления авторизации."
+                    val cleanLines = err.lines().filter { it.isNotBlank() && !it.startsWith("Usage:") }
+                    val cleanErr = cleanLines.find { it.startsWith("ERROR:") || it.startsWith("yt-dlp: error:") }
+                        ?: cleanLines.firstOrNull() ?: err
+                    val displayMsg = if (cleanErr.contains("403") || cleanErr.contains("SABR")) {
+                        "YouTube отклонил запрос (403). Нажмите «Аккаунт» для обновления входа."
                     } else {
-                        "Ошибка: $err"
+                        cleanErr
                     }
-                    binding.tvStatus.text = userMsg
-                    Toast.makeText(this@MainActivity, userMsg, Toast.LENGTH_LONG).show()
+                    binding.tvStatus.text = displayMsg
+                    Toast.makeText(this@MainActivity, displayMsg, Toast.LENGTH_LONG).show()
+
+                    completeDownloadNotification(
+                        title = "Ошибка загрузки",
+                        text = displayMsg
+                    )
+                }
+            } finally {
+                if (wakeLock.isHeld) {
+                    wakeLock.release()
                 }
             }
         }
