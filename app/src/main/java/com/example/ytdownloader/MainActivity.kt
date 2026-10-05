@@ -486,7 +486,8 @@ class MainActivity : AppCompatActivity() {
 
                 val request = YoutubeDLRequest(url)
                 request.addOption("--no-playlist")
-                request.addOption("--no-check-certificates")
+                request.addOption("--no-check-certificate")
+                request.addOption("-4")
                 request.addOption("--extractor-args", "youtube:player_client=default,ios")
 
                 val cookiesFile = File(filesDir, COOKIES_FILE_NAME)
@@ -623,7 +624,8 @@ class MainActivity : AppCompatActivity() {
         request.addOption("-o", "${downloadDir.absolutePath}/%(title)s.%(ext)s")
         request.addOption("--no-mtime")
         request.addOption("--no-playlist")
-        request.addOption("--no-check-certificates")
+        request.addOption("--no-check-certificate")
+                request.addOption("-4")
         request.addOption("--extractor-args", "youtube:player_client=default,ios")
 
         val cookiesFile = File(filesDir, COOKIES_FILE_NAME)
