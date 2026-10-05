@@ -329,6 +329,7 @@ class MainActivity : AppCompatActivity() {
     private fun showYouTubeLoginDialog() {
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
 
+        // Флаг для предотвращения спама уведомлений
         var isAuthHandled = false
 
         val rootLayout = LinearLayout(this).apply {
@@ -748,9 +749,10 @@ class MainActivity : AppCompatActivity() {
                     binding.tvStatus.text = "Готово! Файл сохранён в «Загрузки»"
                     Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
 
+                    val shortTitle = (video.title ?: "Видео").take(40)
                     completeDownloadNotification(
                         title = "Загрузка завершена!",
-                        text = "${(video.title ?: \"Видео\").take(40)} сохранено в Загрузки"
+                        text = "$shortTitle сохранено в Загрузки"
                     )
 
                     MediaScannerConnection.scanFile(
@@ -776,7 +778,6 @@ class MainActivity : AppCompatActivity() {
                     binding.tvStatus.text = displayMsg
                     Toast.makeText(this@MainActivity, displayMsg, Toast.LENGTH_LONG).show()
 
-                    completeDownloadNotification(
                         title = "Ошибка загрузки",
                         text = displayMsg
                     )
@@ -826,4 +827,3 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 }
-
