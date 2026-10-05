@@ -12,13 +12,23 @@ android {
         minSdk = 24
         targetSdk = 34
         // Автоматическое повышение версии при каждой сборке на GitHub Actions
-        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 2
-        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "2"}"
+        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 3
+        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "3"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Оптимизация размера: только современная 64-битная архитектура смартфонов (~35 МБ вместо 190 МБ)
         ndk {
             abiFilters.add("arm64-v8a")
+        }
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
     }
 
@@ -31,6 +41,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -38,6 +49,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
