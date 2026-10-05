@@ -169,32 +169,31 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Loading & Status Section -->
+            <!-- Fetch Status Section (Only for initial link analysis) -->
             <LinearLayout
-                android:id="@+id/layoutStatus"
+                android:id="@+id/layoutFetchStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:gravity="center"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:visibility="gone">
 
                 <com.google.android.material.progressindicator.LinearProgressIndicator
-                    android:id="@+id/progressIndicator"
+                    android:id="@+id/progressFetch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:indeterminate="true"
-                    android:visibility="gone"
                     app:indicatorColor="@color/primary"
                     app:trackColor="@color/surface_variant"
                     app:trackCornerRadius="4dp" />
 
                 <TextView
-                    android:id="@+id/tvStatus"
+                    android:id="@+id/tvFetchStatus"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:gravity="center"
-                    android:text="@string/status_ready"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -327,6 +326,36 @@
                             android:textSize="13sp"
                             app:backgroundTint="@color/surface_variant"
                             app:cornerRadius="20dp" />
+                    </LinearLayout>
+
+                    <!-- Download Progress & Status Section (Directly Below Action Buttons) -->
+                    <LinearLayout
+                        android:id="@+id/layoutStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <com.google.android.material.progressindicator.LinearProgressIndicator
+                            android:id="@+id/progressIndicator"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:indeterminate="true"
+                            android:visibility="gone"
+                            app:indicatorColor="@color/primary"
+                            app:trackColor="@color/surface_variant"
+                            app:trackCornerRadius="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:text="@string/status_ready"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
                     </LinearLayout>
 
                 </LinearLayout>
