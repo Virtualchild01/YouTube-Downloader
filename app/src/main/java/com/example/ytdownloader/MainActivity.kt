@@ -696,6 +696,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    }
     private fun openSupportLink() {
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pay.cloudtips.ru/p/f35243af"))
