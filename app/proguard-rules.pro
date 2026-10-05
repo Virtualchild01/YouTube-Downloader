@@ -1,5 +1,4 @@
 # ProGuard rules for YTDownloader
--keep class com.example.ytdownloader.api.** { *; }
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}
+-keep class com.yausername.youtubedl_android.** { *; }
+-keep class com.yausername.ffmpeg.** { *; }
+-dontwarn com.yausername.**

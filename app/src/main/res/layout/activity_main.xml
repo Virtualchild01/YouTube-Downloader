@@ -66,16 +66,6 @@
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSettings"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:contentDescription="Настройки сервера"
-                    app:icon="@drawable/ic_settings"
-                    app:iconSize="24dp"
-                    app:iconTint="@color/on_surface" />
-
-                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSupportHeader"
                     style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="44dp"
@@ -494,12 +484,4 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-        <WebView
-        android:id="@+id/headlessWebView"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:visibility="invisible"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-    
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,20 +1,18 @@
 package com.example.ytdownloader
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.util.Log
 import android.view.View
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,30 +21,30 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
-import com.example.ytdownloader.api.VideoFormat
-import com.example.ytdownloader.api.YouTubeApiService
-import com.example.ytdownloader.api.YouTubeVideoInfo
 import com.example.ytdownloader.databinding.ActivityMainBinding
-import com.example.ytdownloader.utils.DownloadUtil
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import com.yausername.ffmpeg.FFmpeg
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.youtubedl_android.mapper.VideoInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.Locale
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.regex.Pattern
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SharedPreferences
-    private val apiService = YouTubeApiService()
 
-    private var currentVideoInfo: YouTubeVideoInfo? = null
-    private var selectedFormat: VideoFormat? = null
-
-    private var isResolving = false
-    private var resolveTimeoutJob: Job? = null
+    private var currentVideoInfo: VideoInfo? = null
+    private var currentUrl: String? = null
+    private var selectedQuality: String = "720p HD"
+    private var isYtDlInitialized = false
 
     companion object {
+        private const val TAG = "YTDownloader"
         private const val PREFS_NAME = "yt_downloader_prefs"
         private const val KEY_THEME = "key_theme_mode"
 
@@ -54,7 +52,16 @@ class MainActivity : AppCompatActivity() {
         private const val THEME_DARK = 1
         private const val THEME_LIGHT = 2
 
+        // Ссылка для поддержки разработчика (CloudTips)
         const val DONATION_URL = "https://pay.cloudtips.ru/p/f35243af"
+
+        val QUALITY_OPTIONS = listOf(
+            "1080p Full HD",
+            "720p HD",
+            "480p SD",
+            "360p",
+            "Аудио (MP3)"
+        )
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -76,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        initEngineAsync()
         setupThemeToggle()
         setupListeners()
         handleIncomingIntent(intent)
@@ -84,6 +92,25 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         intent?.let { handleIncomingIntent(it) }
+    }
+
+    private fun initEngineAsync() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                YoutubeDL.getInstance().init(applicationContext)
+                isYtDlInitialized = true
+                Log.d(TAG, "YoutubeDL engine initialized")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize YoutubeDL", e)
+            }
+
+            try {
+                FFmpeg.getInstance().init(applicationContext)
+                Log.d(TAG, "FFmpeg initialized")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize FFmpeg", e)
+            }
+        }
     }
 
     private fun applySavedTheme() {
@@ -122,6 +149,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // Быстрая вставка из буфера обмена
         binding.btnPaste.setOnClickListener {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = clipboard.primaryClip
@@ -134,6 +162,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Поиск информации о видео
         binding.btnFetch.setOnClickListener {
             val text = binding.etUrl.text?.toString()?.trim() ?: ""
             if (text.isNotEmpty()) {
@@ -143,24 +172,29 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Главная кнопка скачивания выбранного качества
         binding.btnDownloadSelected.setOnClickListener {
             checkPermissionsAndDownload()
         }
 
+        // Открыть папку «Загрузки»
         binding.btnViewVideo.setOnClickListener {
             openDownloadsFolder()
         }
 
+        // Поделиться ссылкой на видео
         binding.btnShare.setOnClickListener {
-            val video = currentVideoInfo ?: return@setOnClickListener
+            val url = currentUrl ?: return@setOnClickListener
+            val video = currentVideoInfo
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
-                putExtra(Intent.EXTRA_SUBJECT, video.title)
-                putExtra(Intent.EXTRA_TEXT, "https://www.youtube.com/watch?v=${video.videoId}")
+                putExtra(Intent.EXTRA_SUBJECT, video?.title ?: "Видео")
+                putExtra(Intent.EXTRA_TEXT, url)
             }
             startActivity(Intent.createChooser(shareIntent, "Поделиться видео"))
         }
 
+        // Поддержка разработчика
         binding.btnSupport.setOnClickListener {
             showSupportDialog()
         }
@@ -173,207 +207,110 @@ class MainActivity : AppCompatActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!sharedText.isNullOrEmpty()) {
-                binding.etUrl.setText(sharedText)
-                fetchVideoDetails(sharedText)
+                val cleanUrl = extractUrl(sharedText) ?: sharedText
+                binding.etUrl.setText(cleanUrl)
+                fetchVideoDetails(cleanUrl)
             }
         }
     }
 
+    private fun extractUrl(text: String): String? {
+        val pattern = Pattern.compile("https?://[^\\s]+", Pattern.CASE_INSENSITIVE)
+        val matcher = pattern.matcher(text)
+        return if (matcher.find()) matcher.group(0) else null
+    }
+
+    /**
+     * Анализирует видео с помощью yt-dlp движка.
+     */
     private fun fetchVideoDetails(input: String) {
-        val videoId = apiService.extractVideoId(input)
-        if (videoId == null) {
+        val url = extractUrl(input) ?: input.trim()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
             binding.tvStatus.text = getString(R.string.error_invalid_url)
             Toast.makeText(this, getString(R.string.error_invalid_url), Toast.LENGTH_SHORT).show()
             return
         }
 
+        currentUrl = url
         binding.progressIndicator.isIndeterminate = true
         binding.progressIndicator.visibility = View.VISIBLE
-        binding.tvStatus.text = "Расшифровка потока на устройстве..."
+        binding.tvStatus.text = "Анализ видео через yt-dlp..."
         binding.btnFetch.isEnabled = false
 
-        lifecycleScope.launch {
-            val (title, author) = apiService.fetchBasicMetadata(videoId)
-            val thumbnail = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
-
-            resolveViaHeadlessPlayer(videoId, title, author, thumbnail)
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun resolveViaHeadlessPlayer(
-        videoId: String,
-        title: String,
-        author: String,
-        thumbnail: String
-    ) {
-        isResolving = true
-        val capturedFormats = mutableListOf<VideoFormat>()
-
-        binding.headlessWebView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-        }
-
-        binding.headlessWebView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                val urlStr = request?.url?.toString() ?: ""
-                if (urlStr.contains("googlevideo.com/videoplayback") && isResolving) {
-                    val cleanUrl = cleanVideoPlaybackUrl(urlStr)
-                    val uri = Uri.parse(urlStr)
-                    val itag = uri.getQueryParameter("itag") ?: "18"
-                    val mime = uri.getQueryParameter("mime") ?: ""
-
-                    val isAudio = mime.startsWith("audio") || itag == "140"
-                    val qualityLabel = when (itag) {
-                        "22" -> "720p HD"
-                        "18" -> "360p SD"
-                        "137" -> "1080p Full HD"
-                        "136" -> "720p HD"
-                        "140" -> "Аудио (M4A / MP3)"
-                        else -> if (isAudio) "Аудио (MP3)" else "Видео (MP4)"
-                    }
-                    val ext = if (isAudio) "m4a" else "mp4"
-
-                    val format = VideoFormat(
-                        id = "stream_$itag",
-                        qualityLabel = qualityLabel,
-                        extension = ext,
-                        fileSizeBytes = 0L,
-                        fileSizeFormatted = "",
-                        downloadUrl = cleanUrl,
-                        isAudioOnly = isAudio
-                    )
-
-                    synchronized(capturedFormats) {
-                        if (capturedFormats.none { it.qualityLabel == qualityLabel }) {
-                            capturedFormats.add(format)
-                        }
-                    }
-
-                    if (isResolving && capturedFormats.isNotEmpty()) {
-                        isResolving = false
-                        resolveTimeoutJob?.cancel()
-
-                        runOnUiThread {
-                            binding.headlessWebView.loadUrl("about:blank")
-                            binding.progressIndicator.visibility = View.GONE
-                            binding.btnFetch.isEnabled = true
-
-                            val info = YouTubeVideoInfo(
-                                videoId = videoId,
-                                title = title,
-                                author = author,
-                                thumbnailUrl = thumbnail,
-                                durationSeconds = 240L,
-                                formats = capturedFormats.toList()
-                            )
-                            currentVideoInfo = info
-                            displayVideoPreview(info)
-                        }
-                    }
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                if (!isYtDlInitialized) {
+                    YoutubeDL.getInstance().init(applicationContext)
+                    try { FFmpeg.getInstance().init(applicationContext) } catch (_: Exception) {}
+                    isYtDlInitialized = true
                 }
-                return super.shouldInterceptRequest(view, request)
-            }
-        }
 
-        resolveTimeoutJob = lifecycleScope.launch {
-            delay(15000)
-            if (isResolving) {
-                isResolving = false
-                binding.headlessWebView.loadUrl("about:blank")
-                binding.progressIndicator.visibility = View.GONE
-                binding.btnFetch.isEnabled = true
-                binding.tvStatus.text = "Не удалось расшифровать поток. Убедитесь, что включен VPN."
-                Toast.makeText(this@MainActivity, "Таймаут расшифровки потока. Проверьте VPN.", Toast.LENGTH_LONG).show()
-            }
-        }
+                val request = YoutubeDLRequest(url)
+                request.addOption("--no-playlist")
+                request.addOption("--no-check-certificates")
 
-        val embedHtml = """
-            <!DOCTYPE html>
-            <html>
-            <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-            <body style="margin:0;padding:0;background:#000;">
-              <iframe width="100%" height="100%"
-                src="https://www.youtube.com/embed/$videoId?autoplay=1&mute=1&playsinline=1&controls=0"
-                frameborder="0" allow="autoplay; encrypted-media"></iframe>
-            </body>
-            </html>
-        """.trimIndent()
+                val info: VideoInfo = YoutubeDL.getInstance().getInfo(request)
+                currentVideoInfo = info
 
-        binding.headlessWebView.loadDataWithBaseURL(
-            "https://www.youtube.com",
-            embedHtml,
-            "text/html",
-            "UTF-8",
-            null
-        )
-    }
-
-    private fun cleanVideoPlaybackUrl(rawUrl: String): String {
-        return try {
-            val uri = Uri.parse(rawUrl)
-            val builder = uri.buildUpon().clearQuery()
-            for (param in uri.queryParameterNames) {
-                if (param != "range" && param != "rn" && param != "rbuf") {
-                    builder.appendQueryParameter(param, uri.getQueryParameter(param))
+                withContext(Dispatchers.Main) {
+                    binding.progressIndicator.visibility = View.GONE
+                    binding.btnFetch.isEnabled = true
+                    displayVideoPreview(info)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.progressIndicator.visibility = View.GONE
+                    binding.btnFetch.isEnabled = true
+                    val err = e.message ?: "Не удалось получить информацию"
+                    val userMsg = if (err.contains("timeout", ignoreCase = true) || err.contains("connect", ignoreCase = true)) {
+                        "Тайм-аут подключения. Убедитесь, что включен VPN."
+                    } else {
+                        "Ошибка: $err"
+                    }
+                    binding.tvStatus.text = userMsg
+                    Toast.makeText(this@MainActivity, userMsg, Toast.LENGTH_LONG).show()
                 }
             }
-            builder.build().toString()
-        } catch (_: Exception) {
-            rawUrl
         }
     }
 
-    private fun displayVideoPreview(info: YouTubeVideoInfo) {
+    /**
+     * Отображает превью видео и инициализирует меню выбора качества.
+     */
+    private fun displayVideoPreview(info: VideoInfo) {
         binding.cardPreview.visibility = View.VISIBLE
-        binding.tvAuthor.text = info.author
-        binding.tvVideoTitle.text = info.title
-        binding.tvStatus.text = "Поток расшифрован! Нажмите «Скачать»"
+        binding.tvAuthor.text = info.uploader ?: "YouTube"
+        binding.tvVideoTitle.text = info.title ?: "Без названия"
+        binding.tvStatus.text = "Видео готово к скачиванию!"
 
-        if (info.thumbnailUrl.isNotEmpty()) {
+        val thumb = info.thumbnail
+        if (!thumb.isNullOrEmpty()) {
             Glide.with(this)
-                .load(info.thumbnailUrl)
+                .load(thumb)
                 .centerCrop()
                 .into(binding.ivCover)
         }
 
-        if (info.formats.isNotEmpty()) {
-            val adapter = ArrayAdapter(
-                this,
-                android.R.layout.simple_dropdown_item_1line,
-                info.formats
-            )
-            binding.actvQuality.setAdapter(adapter)
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_dropdown_item_1line,
+            QUALITY_OPTIONS
+        )
+        binding.actvQuality.setAdapter(adapter)
 
-            val defaultFormat = info.formats.firstOrNull { it.qualityLabel.contains("720") }
-                ?: info.formats.firstOrNull { it.qualityLabel.contains("360") }
-                ?: info.formats.first()
+        selectedQuality = "720p HD"
+        binding.actvQuality.setText(selectedQuality, false)
+        binding.btnDownloadSelected.text = "Скачать $selectedQuality"
 
-            selectedFormat = defaultFormat
-            binding.actvQuality.setText(defaultFormat.displayLabel, false)
-            updateDownloadButtonLabel(defaultFormat)
-
-            binding.actvQuality.setOnItemClickListener { _, _, position, _ ->
-                val chosen = info.formats[position]
-                selectedFormat = chosen
-                updateDownloadButtonLabel(chosen)
-            }
+        binding.actvQuality.setOnItemClickListener { _, _, position, _ ->
+            selectedQuality = QUALITY_OPTIONS[position]
+            binding.btnDownloadSelected.text = "Скачать $selectedQuality"
         }
     }
 
-    private fun updateDownloadButtonLabel(format: VideoFormat) {
-        binding.btnDownloadSelected.text = "Скачать ${format.qualityLabel}"
-    }
-
     private fun checkPermissionsAndDownload() {
-        if (selectedFormat == null) {
-            Toast.makeText(this, "Пожалуйста, выберите качество видео", Toast.LENGTH_SHORT).show()
+        if (currentUrl == null) {
+            Toast.makeText(this, "Сначала вставьте ссылку на видео", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -397,45 +334,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startDownloadProcess() {
-        val video = currentVideoInfo ?: return
-        val format = selectedFormat ?: return
+        val url = currentUrl ?: return
+        val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!downloadDir.exists()) downloadDir.mkdirs()
 
         binding.progressIndicator.isIndeterminate = false
         binding.progressIndicator.progress = 0
         binding.progressIndicator.visibility = View.VISIBLE
         binding.btnDownloadSelected.isEnabled = false
-        binding.tvStatus.text = "Подключение к потоку..."
+        binding.tvStatus.text = "Подготовка к скачиванию..."
 
-        lifecycleScope.launch {
-            val result = DownloadUtil.downloadDirectly(
-                context = this@MainActivity,
-                url = format.downloadUrl,
-                title = video.title,
-                quality = format.qualityLabel,
-                extension = format.extension
-            ) { percent, downloaded, total ->
-                if (percent >= 0) {
-                    binding.progressIndicator.isIndeterminate = false
-                    binding.progressIndicator.progress = percent
-                    val mbDownloaded = downloaded / (1024.0 * 1024.0)
-                    val mbTotal = total / (1024.0 * 1024.0)
-                    binding.tvStatus.text = String.format(Locale.US, "Скачивание: %d%% (%.1f / %.1f МБ)", percent, mbDownloaded, mbTotal)
-                } else {
-                    binding.progressIndicator.isIndeterminate = true
-                    val mbDownloaded = downloaded / (1024.0 * 1024.0)
-                    binding.tvStatus.text = String.format(Locale.US, "Скачано: %.1f МБ...", mbDownloaded)
-                }
+        val processId = "yt_dl_${System.currentTimeMillis()}"
+
+        val request = YoutubeDLRequest(url)
+        request.addOption("-o", "${downloadDir.absolutePath}/%(title)s.%(ext)s")
+        request.addOption("--no-mtime")
+        request.addOption("--no-playlist")
+        request.addOption("--no-check-certificates")
+
+        when (selectedQuality) {
+            "1080p Full HD" -> request.addOption("-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best")
+            "720p HD" -> request.addOption("-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best")
+            "480p SD" -> request.addOption("-f", "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best")
+            "360p" -> request.addOption("-f", "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best")
+            "Аудио (MP3)" -> {
+                request.addOption("-x")
+                request.addOption("--audio-format", "mp3")
+                request.addOption("-f", "bestaudio")
             }
+            else -> request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+        }
 
-            binding.progressIndicator.visibility = View.GONE
-            binding.btnDownloadSelected.isEnabled = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds ->
+                    runOnUiThread {
+                        binding.progressIndicator.isIndeterminate = false
+                        binding.progressIndicator.progress = progress.toInt()
+                        val etaStr = if (etaInSeconds > 0) " (осталось ~${etaInSeconds}с)" else ""
+                        binding.tvStatus.text = "Скачивание: ${progress.toInt()}%$etaStr"
+                    }
+                }
 
-            result.onSuccess { file ->
-                binding.tvStatus.text = "Готово! Файл сохранён: ${file.name}"
-                Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
-            }.onFailure { error ->
-                binding.tvStatus.text = "Ошибка: ${error.message}"
-                Toast.makeText(this@MainActivity, "Ошибка скачивания: ${error.message}", Toast.LENGTH_LONG).show()
+                withContext(Dispatchers.Main) {
+                    binding.progressIndicator.visibility = View.GONE
+                    binding.btnDownloadSelected.isEnabled = true
+                    binding.tvStatus.text = "Готово! Файл сохранён в «Загрузки»"
+                    Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
+
+                    MediaScannerConnection.scanFile(
+                        this@MainActivity,
+                        arrayOf(downloadDir.absolutePath),
+                        null,
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.progressIndicator.visibility = View.GONE
+                    binding.btnDownloadSelected.isEnabled = true
+                    val err = e.message ?: "Ошибка скачивания"
+                    binding.tvStatus.text = "Ошибка: $err"
+                    Toast.makeText(this@MainActivity, "Ошибка скачивания: $err", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

@@ -11,25 +11,26 @@ android {
         applicationId = "com.example.ytdownloader"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Автоматическое повышение версии при каждой сборке на GitHub Actions
+        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 2
+        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "2"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters.addAll(listOf("x86", "x86_64", "armeabi-v7a", "arm64-v8a"))
+        }
     }
 
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -37,15 +38,8 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    lint {
-        abortOnError = false
-        checkReleaseBuilds = false
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -64,16 +58,13 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-
-    // Coroutines for asynchronous network operations
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // HTTP client
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // JSON parsing
-    implementation("com.google.code.gson:gson:2.10.1")
 
     // Image loading for thumbnails
     implementation("com.github.bumptech.glide:glide:4.16.0")
+
+    // youtubedl-android (Движок yt-dlp & FFmpeg из приложения Seal)
+    val youtubedlAndroid = "0.18.1"
+    implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroid")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlAndroid")
 }
