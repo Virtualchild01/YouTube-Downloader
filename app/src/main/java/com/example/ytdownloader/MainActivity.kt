@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
 
         private const val CHANNEL_ID = "yt_downloader_channel"
         private const val NOTIFICATION_ID = 1001
+        private const val NOTIFICATION_COMPLETE_ID = 1002
 
         private const val THEME_AUTO = 0
         private const val THEME_DARK = 1
@@ -166,15 +167,28 @@ class MainActivity : AppCompatActivity() {
     private fun completeDownloadNotification(title: String, text: String) {
         try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(NOTIFICATION_ID)
+
+            val intent = Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0
+            )
+
             val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setContentTitle(title)
                 .setContentText(text)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setOngoing(false)
 
-            notificationManager.notify(NOTIFICATION_ID, builder.build())
+            notificationManager.notify(NOTIFICATION_COMPLETE_ID, builder.build())
         } catch (e: Exception) {}
     }
 
@@ -847,11 +861,13 @@ class MainActivity : AppCompatActivity() {
             val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "YTDownloader:DownloadWakeLock")
             wakeLock.acquire(30 * 60 * 1000L)
 
+            val isDownloading = java.util.concurrent.atomic.AtomicBoolean(true)
             var isAudioStage = false
             var lastProgress = 0f
 
             try {
                 YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                    if (!isDownloading.get()) return@execute
                     val rawLine = line ?: ""
                     if (rawLine.contains(".m4a", ignoreCase = true) ||
                         rawLine.contains(".mp3", ignoreCase = true) ||
@@ -893,6 +909,7 @@ class MainActivity : AppCompatActivity() {
                         progress = progress.toInt()
                     )
                 }
+                isDownloading.set(false)
 
                 withContext(Dispatchers.Main) {
                     binding.progressIndicator.visibility = View.GONE
@@ -935,6 +952,11 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             } finally {
+                isDownloading.set(false)
+                try {
+                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    notificationManager.cancel(NOTIFICATION_ID)
+                } catch (e: Exception) {}
                 try {
                     if (wakeLock.isHeld) {
                         wakeLock.release()
