@@ -82,6 +82,8 @@ class MainActivity : AppCompatActivity() {
         const val DONATION_URL = "https://pay.cloudtips.ru/p/f35243af"
 
         val QUALITY_OPTIONS = listOf(
+            "4K Ultra HD (2160p)",
+            "2K Quad HD (1440p)",
             "1080p Full HD",
             "720p HD",
             "480p SD",
@@ -622,12 +624,14 @@ class MainActivity : AppCompatActivity() {
     private fun estimateSizeFormatted(quality: String, durationSec: Long): String {
         if (durationSec <= 0) return ""
         val bitrateBps = when {
-            quality.contains("1080") -> 2_100_000L
-            quality.contains("720") -> 1_180_000L
-            quality.contains("480") -> 600_000L
-            quality.contains("360") -> 335_000L
-            quality.contains("MP3") -> 130_000L
-            else -> 1_000_000L
+            quality.contains("2160") || quality.contains("4K") -> 18_000_000L
+            quality.contains("1440") || quality.contains("2K") -> 9_000_000L
+            quality.contains("1080") -> 3_500_000L
+            quality.contains("720") -> 2_000_000L
+            quality.contains("480") -> 1_000_000L
+            quality.contains("360") -> 600_000L
+            quality.contains("MP3") -> 160_000L
+            else -> 1_500_000L
         }
         val bytes = (durationSec * bitrateBps) / 8L
         val mb = bytes / (1024.0 * 1024.0)
@@ -695,17 +699,23 @@ class MainActivity : AppCompatActivity() {
             request.addOption("--cookies", cookiesFile.absolutePath)
         }
 
+        if (selectedQuality != "Аудио (MP3)") {
+            request.addOption("--merge-output-format", "mp4")
+        }
+
         when (selectedQuality) {
-            "1080p Full HD" -> request.addOption("-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best")
-            "720p HD" -> request.addOption("-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best")
-            "480p SD" -> request.addOption("-f", "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best")
-            "360p" -> request.addOption("-f", "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best")
+            "4K Ultra HD (2160p)" -> request.addOption("-f", "bestvideo[height<=2160]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best[height<=2160]/best")
+            "2K Quad HD (1440p)" -> request.addOption("-f", "bestvideo[height<=1440]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440]/best")
+            "1080p Full HD" -> request.addOption("-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best")
+            "720p HD" -> request.addOption("-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best")
+            "480p SD" -> request.addOption("-f", "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best")
+            "360p" -> request.addOption("-f", "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=360]+bestaudio/best[height<=360]/best")
             "Аудио (MP3)" -> {
                 request.addOption("-x")
                 request.addOption("--audio-format", "mp3")
                 request.addOption("-f", "bestaudio")
             }
-            else -> request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+            else -> request.addOption("-f", "bestvideo+bestaudio/best")
         }
 
         downloadScope.launch {
@@ -721,6 +731,7 @@ class MainActivity : AppCompatActivity() {
                     val rawLine = line ?: ""
                     if (rawLine.contains(".m4a", ignoreCase = true) ||
                         rawLine.contains(".mp3", ignoreCase = true) ||
+                        rawLine.contains(".opus", ignoreCase = true) ||
                         rawLine.contains("audio", ignoreCase = true) ||
                         (lastProgress > 75f && progress < 25f)) {
                         isAudioStage = true
@@ -845,4 +856,3 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 }
-
