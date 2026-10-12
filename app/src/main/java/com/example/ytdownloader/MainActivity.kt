@@ -582,6 +582,83 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun getAvailableResolutions(info: VideoInfo): List<Pair<Int, Int>> {
+        val list = mutableListOf<Pair<Int, Int>>()
+        try {
+            val formatsObj = try {
+                val field = info.javaClass.getDeclaredField("formats").apply { isAccessible = true }
+                field.get(info)
+            } catch (e: Exception) {
+                try {
+                    val method = info.javaClass.getMethod("getFormats")
+                    method.invoke(info)
+                } catch (e2: Exception) {
+                    null
+                }
+            }
+
+            if (formatsObj is List<*>) {
+                for (format in formatsObj) {
+                    if (format == null) continue
+                    val h = try {
+                        val field = format.javaClass.getDeclaredField("height").apply { isAccessible = true }
+                        (field.get(format) as? Number)?.toInt() ?: 0
+                    } catch (e: Exception) {
+                        try {
+                            val method = format.javaClass.getMethod("getHeight")
+                            (method.invoke(format) as? Number)?.toInt() ?: 0
+                        } catch (e2: Exception) {
+                            0
+                        }
+                    }
+                    val w = try {
+                        val field = format.javaClass.getDeclaredField("width").apply { isAccessible = true }
+                        (field.get(format) as? Number)?.toInt() ?: 0
+                    } catch (e: Exception) {
+                        try {
+                            val method = format.javaClass.getMethod("getWidth")
+                            (method.invoke(format) as? Number)?.toInt() ?: 0
+                        } catch (e2: Exception) {
+                            0
+                        }
+                    }
+                    if (w > 0 || h > 0) {
+                        list.add(Pair(w, h))
+                    }
+                }
+            }
+
+            val rootH = try {
+                val field = info.javaClass.getDeclaredField("height").apply { isAccessible = true }
+                (field.get(info) as? Number)?.toInt() ?: 0
+            } catch (e: Exception) {
+                try {
+                    val method = info.javaClass.getMethod("getHeight")
+                    (method.invoke(info) as? Number)?.toInt() ?: 0
+                } catch (e2: Exception) {
+                    0
+                }
+            }
+            val rootW = try {
+                val field = info.javaClass.getDeclaredField("width").apply { isAccessible = true }
+                (field.get(info) as? Number)?.toInt() ?: 0
+            } catch (e: Exception) {
+                try {
+                    val method = info.javaClass.getMethod("getWidth")
+                    (method.invoke(info) as? Number)?.toInt() ?: 0
+                } catch (e2: Exception) {
+                    0
+                }
+            }
+            if (rootW > 0 || rootH > 0) {
+                list.add(Pair(rootW, rootH))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting resolutions", e)
+        }
+        return list
+    }
+
     private fun displayVideoPreview(info: VideoInfo) {
         binding.cardPreview.visibility = View.VISIBLE
         binding.tvAuthor.text = info.uploader ?: "YouTube"
@@ -597,8 +674,33 @@ class MainActivity : AppCompatActivity() {
                 .into(binding.ivCover)
         }
 
+        val resolutions = getAvailableResolutions(info)
+        val filteredQualities = if (resolutions.isEmpty()) {
+            QUALITY_OPTIONS
+        } else {
+            val has4k = resolutions.any { (w, h) -> maxOf(w, h) >= 3840 || minOf(w, h) >= 2160 }
+            val has2k = resolutions.any { (w, h) -> maxOf(w, h) >= 2560 || minOf(w, h) >= 1440 }
+            val has1080 = resolutions.any { (w, h) -> maxOf(w, h) >= 1920 || minOf(w, h) >= 1080 }
+            val has720 = resolutions.any { (w, h) -> maxOf(w, h) >= 1280 || minOf(w, h) >= 720 }
+            val has480 = resolutions.any { (w, h) -> maxOf(w, h) >= 854 || minOf(w, h) >= 480 }
+            val has360 = resolutions.any { (w, h) -> maxOf(w, h) >= 640 || minOf(w, h) >= 360 }
+
+            QUALITY_OPTIONS.filter { quality ->
+                when {
+                    quality.contains("2160") || quality.contains("4K") -> has4k
+                    quality.contains("1440") || quality.contains("2K") -> has2k
+                    quality.contains("1080") -> has1080
+                    quality.contains("720") -> has720
+                    quality.contains("480") -> has480
+                    quality.contains("360") -> has360
+                    quality.contains("MP3") -> true
+                    else -> true
+                }
+            }.ifEmpty { QUALITY_OPTIONS }
+        }
+
         val durationSec = (info.duration ?: 0).toLong()
-        val optionsWithSizes = QUALITY_OPTIONS.map { quality ->
+        val optionsWithSizes = filteredQualities.map { quality ->
             val estSize = estimateSizeFormatted(quality, durationSec)
             if (estSize.isNotEmpty()) "$quality ($estSize)" else quality
         }
@@ -610,13 +712,18 @@ class MainActivity : AppCompatActivity() {
         )
         binding.actvQuality.setAdapter(adapter)
 
-        val defaultSelection = optionsWithSizes.firstOrNull { it.contains("720") } ?: optionsWithSizes[0]
-        selectedQuality = "720p HD"
+        val defaultSelection = optionsWithSizes.firstOrNull { it.contains("720") }
+            ?: optionsWithSizes.firstOrNull { it.contains("1080") }
+            ?: optionsWithSizes[0]
+        selectedQuality = filteredQualities.firstOrNull { it.contains("720") }
+            ?: filteredQualities.firstOrNull { it.contains("1080") }
+            ?: filteredQualities[0]
+
         binding.actvQuality.setText(defaultSelection, false)
-        binding.btnDownloadSelected.text = "Скачать 720p HD"
+        binding.btnDownloadSelected.text = "Скачать $selectedQuality"
 
         binding.actvQuality.setOnItemClickListener { _, _, position, _ ->
-            selectedQuality = QUALITY_OPTIONS[position]
+            selectedQuality = filteredQualities[position]
             binding.btnDownloadSelected.text = "Скачать $selectedQuality"
         }
     }

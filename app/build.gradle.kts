@@ -12,8 +12,8 @@ android {
         minSdk = 24
         targetSdk = 34
         // Автоматическое повышение версии при каждой сборке на GitHub Actions
-        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 37
-        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "37"}"
+        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 38
+        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "38"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
