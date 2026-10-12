@@ -642,6 +642,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun formatEta(etaInSeconds: Long): String {
+        if (etaInSeconds <= 0) return ""
+        return when {
+            etaInSeconds >= 3600 -> {
+                val hours = etaInSeconds / 3600
+                val minutes = (etaInSeconds % 3600) / 60
+                if (minutes > 0) "${hours} ч ${minutes} мин" else "${hours} ч"
+            }
+            etaInSeconds >= 60 -> {
+                val minutes = etaInSeconds / 60
+                val seconds = etaInSeconds % 60
+                if (seconds > 0) "${minutes} мин ${seconds} с" else "${minutes} мин"
+            }
+            else -> "${etaInSeconds} с"
+        }
+    }
+
     private fun checkPermissionsAndDownload() {
         if (currentUrl == null) {
             Toast.makeText(this, "Сначала вставьте ссылку на видео", Toast.LENGTH_SHORT).show()
@@ -746,7 +763,8 @@ class MainActivity : AppCompatActivity() {
                         "Скачивание видео"
                     }
 
-                    val etaStr = if (etaInSeconds > 0) " (~${etaInSeconds}с)" else ""
+                    val formattedEta = formatEta(etaInSeconds.toLong())
+                    val etaStr = if (formattedEta.isNotEmpty()) " (~$formattedEta)" else ""
                     val progressText = if (stageName.startsWith("Объединение")) {
                         stageName
                     } else {
