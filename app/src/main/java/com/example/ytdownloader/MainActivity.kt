@@ -36,6 +36,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.example.ytdownloader.data.AviConverter
 import com.example.ytdownloader.data.DownloadStorage
 import com.example.ytdownloader.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -81,6 +82,9 @@ class MainActivity : AppCompatActivity() {
 
         const val DONATION_URL = "https://pay.cloudtips.ru/p/f35243af"
 
+        /** Не поток YouTube, а локальная конвертация: качаем mp4 и перекодируем в AVI. */
+        const val AVI_QUALITY = "AVI для старых ТВ (Xvid)"
+
         val QUALITY_OPTIONS = listOf(
             "4K Ultra HD (2160p)",
             "2K Quad HD (1440p)",
@@ -88,7 +92,8 @@ class MainActivity : AppCompatActivity() {
             "720p HD",
             "480p SD",
             "360p",
-            "Аудио (MP3)"
+            "Аудио (MP3)",
+            AVI_QUALITY
         )
     }
 
@@ -711,6 +716,7 @@ class MainActivity : AppCompatActivity() {
                     quality.contains("480") -> has480
                     quality.contains("360") -> has360
                     quality.contains("MP3") -> true
+                    quality == AVI_QUALITY -> true
                     else -> true
                 }
             }.ifEmpty { QUALITY_OPTIONS }
@@ -755,6 +761,7 @@ class MainActivity : AppCompatActivity() {
             quality.contains("480") -> 1_000_000L
             quality.contains("360") -> 600_000L
             quality.contains("MP3") -> 160_000L
+            quality == AVI_QUALITY -> 2_400_000L
             else -> 1_500_000L
         }
         val bytes = (durationSec * bitrateBps) / 8L
@@ -850,6 +857,9 @@ class MainActivity : AppCompatActivity() {
             request.addOption("--merge-output-format", "mp4")
         }
 
+        // Для AVI промежуточный файл качаем не выше 720p: перекодировать 4K в Xvid бессмысленно
+        val videoFormatCeiling = if (selectedQuality == AVI_QUALITY) 720 else null
+
         when (selectedQuality) {
             "4K Ultra HD (2160p)" -> request.addOption("-f", "bestvideo[height<=2160]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best[height<=2160]/best")
             "2K Quad HD (1440p)" -> request.addOption("-f", "bestvideo[height<=1440]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440]/best")
@@ -862,6 +872,10 @@ class MainActivity : AppCompatActivity() {
                 request.addOption("--audio-format", "mp3")
                 request.addOption("-f", "bestaudio")
             }
+            AVI_QUALITY -> request.addOption(
+                "-f",
+                "bestvideo[height<=$videoFormatCeiling][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=$videoFormatCeiling]+bestaudio/best[height<=$videoFormatCeiling]/best"
+            )
             else -> request.addOption("-f", "bestvideo+bestaudio/best")
         }
 
@@ -920,12 +934,78 @@ class MainActivity : AppCompatActivity() {
                 }
                 isDownloading.set(false)
 
-                // Переносим готовые файлы из временной папки в Downloads/YTDownloader.
-                // Отбрасываем недокачанные .part и служебные файлы FFmpeg.
-                val produced = tempDir.listFiles()
+                // Для AVI сначала перекодируем скачанный mp4, и сохраняем только результат
+                val downloaded = tempDir.listFiles()
                     ?.filter { it.isFile && DownloadStorage.isMediaFile(it.name) }
                     ?: emptyList()
-                val savedUris = produced.mapNotNull { file ->
+
+                if (downloaded.isEmpty()) {
+                    tempDir.deleteRecursively()
+                    withContext(Dispatchers.Main) {
+                        binding.progressIndicator.visibility = View.GONE
+                        binding.btnDownloadSelected.isEnabled = true
+                        val msg = getString(R.string.save_failed)
+                        binding.tvStatus.text = msg
+                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        completeDownloadNotification(title = "Ошибка загрузки", text = msg)
+                    }
+                    return@launch
+                }
+
+                val filesToSave = if (selectedQuality == AVI_QUALITY) {
+                    val source = downloaded.first()
+                    val aviFile = File(tempDir, source.nameWithoutExtension + ".avi")
+
+                    withContext(Dispatchers.Main) {
+                        binding.progressIndicator.progress = 0
+                        binding.tvStatus.text = getString(R.string.status_converting)
+                    }
+
+                    val result = AviConverter.convert(
+                        context = applicationContext,
+                        input = source,
+                        output = aviFile,
+                        durationSec = (video.duration ?: 0).toLong(),
+                        onProgress = { percent ->
+                            val text = getString(R.string.status_converting_percent, percent)
+                            runOnUiThread {
+                                if (!isFinishing && !isDestroyed) {
+                                    binding.progressIndicator.isIndeterminate = false
+                                    binding.progressIndicator.progress = percent
+                                    binding.tvStatus.text = text
+                                }
+                            }
+                            updateDownloadNotification(
+                                title = (video.title ?: "Видео").take(40),
+                                text = text,
+                                progress = percent
+                            )
+                        }
+                    )
+
+                    when (result) {
+                        is AviConverter.Result.Success -> {
+                            source.delete()
+                            listOf(result.file)
+                        }
+                        is AviConverter.Result.Failure -> {
+                            tempDir.deleteRecursively()
+                            withContext(Dispatchers.Main) {
+                                binding.progressIndicator.visibility = View.GONE
+                                binding.btnDownloadSelected.isEnabled = true
+                                binding.tvStatus.text = result.message
+                                Toast.makeText(this@MainActivity, result.message, Toast.LENGTH_LONG).show()
+                                completeDownloadNotification(title = "Ошибка конвертации", text = result.message)
+                            }
+                            return@launch
+                        }
+                    }
+                } else {
+                    downloaded
+                }
+
+                // Публикуем в Downloads/YTDownloader. Недокачанные .part уже отфильтрованы.
+                val savedUris = filesToSave.mapNotNull { file ->
                     DownloadStorage.save(applicationContext, file, file.name)
                 }
                 tempDir.deleteRecursively()

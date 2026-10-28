@@ -42,4 +42,6 @@
     <string name="btn_login">Войти</string>
     <string name="save_failed">Не удалось сохранить файл в «Загрузки»</string>
     <string name="status_saved">Готово! Файл сохранён в «Загрузки/YTDownloader»</string>
+    <string name="status_converting">Конвертация в AVI (Xvid + MP3)...</string>
+    <string name="status_converting_percent">Конвертация в AVI: %1$d%%</string>
 </resources>
