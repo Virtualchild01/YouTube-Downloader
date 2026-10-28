@@ -210,14 +210,17 @@ object DownloadStorage {
 
     // ------------------------------------------------------------- удаление
 
-    fun delete(context: Context, media: DownloadedMedia): Boolean = try {
-        if (media.uri.scheme == "content") {
-            context.contentResolver.delete(media.uri, null, null) > 0
-        } else {
-            File(media.uri.path ?: return false).delete()
+    fun delete(context: Context, media: DownloadedMedia): Boolean {
+        return try {
+            if (media.uri.scheme == "content") {
+                context.contentResolver.delete(media.uri, null, null) > 0
+            } else {
+                val path = media.uri.path ?: return false
+                File(path).delete()
+            }
+        } catch (e: Exception) {
+            false
         }
-    } catch (e: Exception) {
-        false
     }
 
     // -------------------------------------------------------------- утилиты
