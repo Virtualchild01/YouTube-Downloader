@@ -65,8 +65,9 @@ object AviConverter {
             add(input.absolutePath)
             add("-vf")
             // Не апскейлим: если источник меньше 720p, оставляем как есть.
-            // Запятая внутри выражения scale — разделитель фильтров, её надо экранировать.
-            add("scale=-2:min($MAX_HEIGHT\\,ih)")
+            // Xvid требует чётную высоту, поэтому trunc(.../2)*2. Запятая внутри min()
+            // экранируется — она разделитель фильтров, а не аргумент.
+            add("scale=-2:trunc(min($MAX_HEIGHT\\,ih)/2)*2")
             add("-c:v")
             add("libxvid")
             add("-b:v")

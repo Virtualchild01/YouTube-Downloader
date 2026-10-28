@@ -957,6 +957,8 @@ class MainActivity : AppCompatActivity() {
                     val aviFile = File(tempDir, source.nameWithoutExtension + ".avi")
 
                     withContext(Dispatchers.Main) {
+                        // Без длительности ролика процент не посчитать — показываем бегущую полосу
+                        binding.progressIndicator.isIndeterminate = (video.duration ?: 0).toLong() <= 0
                         binding.progressIndicator.progress = 0
                         binding.tvStatus.text = getString(R.string.status_converting)
                     }
