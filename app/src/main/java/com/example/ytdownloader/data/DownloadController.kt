@@ -7,6 +7,7 @@ import android.os.PowerManager
 import android.util.Log
 import com.example.ytdownloader.R
 import com.example.ytdownloader.notification.DownloadNotifier
+import com.example.ytdownloader.notification.DownloadService
 import com.example.ytdownloader.util.Formatters
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.mapper.VideoInfo
@@ -35,9 +36,11 @@ class DownloadController private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val running = AtomicBoolean(false)
 
-    /** Слушатель ставит Activity; события приходят на главном потоке. */
-    @Volatile
-    private var listener: ((Event) -> Unit)? = null
+    /**
+     * Слушатели: Activity (прогресс на экране) и foreground-сервис (жизненный цикл).
+     * Раньше слушатель был один, и сервис, подписавшись, молча отбирал события у Activity.
+     */
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<(Event) -> Unit>()
 
     /** Последнее состояние — чтобы Activity могла восстановить UI после пересоздания. */
     @Volatile
@@ -74,11 +77,12 @@ class DownloadController private constructor(context: Context) {
     val isRunning: Boolean get() = running.get()
 
     fun observe(listener: (Event) -> Unit) {
-        this.listener = listener
+        listeners.addIfAbsent(listener)
     }
 
-    fun stopObserving() {
-        listener = null
+    /** Отписывает конкретный слушатель; остальные продолжают получать события. */
+    fun stopObserving(listener: (Event) -> Unit) {
+        listeners.remove(listener)
     }
 
     /**
@@ -91,6 +95,8 @@ class DownloadController private constructor(context: Context) {
         lastProgress = 0
         lastStatusText = null
         lastOutcome = null
+        // Foreground-сервис держит процесс живым, пока пользователь свернул приложение
+        DownloadService.start(appContext)
         scope.launch { runDownload(url, video, quality) }
         return true
     }
@@ -295,7 +301,7 @@ class DownloadController private constructor(context: Context) {
                 lastOutcome = Outcome.Failed(event.message)
             }
         }
-        mainHandler.post { listener?.invoke(event) }
+        mainHandler.post { listeners.forEach { it(event) } }
     }
 
     private fun VideoInfo.notificationTitle(): String =

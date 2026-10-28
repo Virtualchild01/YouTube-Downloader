@@ -1,6 +1,7 @@
 package com.example.ytdownloader.notification
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -48,19 +49,25 @@ class DownloadNotifier(private val context: Context) {
                 Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
 
+    /**
+     * Нотификация прогресса. Её же использует foreground-сервис, чтобы полоса
+     * в шторке была одна, а не две.
+     */
+    fun progressNotification(title: String, text: String, percent: Int): Notification =
+        NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, percent.coerceIn(0, 100), false)
+            .build()
+
     /** Обновление полосы прогресса. Не падает, если уведомления запрещены. */
     fun progress(title: String, text: String, percent: Int) {
         runCatching {
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setProgress(100, percent.coerceIn(0, 100), false)
-                .build()
-            manager.notify(NOTIFICATION_ID, notification)
+            manager.notify(NOTIFICATION_ID, progressNotification(title, text, percent))
         }
     }
 
@@ -99,7 +106,8 @@ class DownloadNotifier(private val context: Context) {
 
     companion object {
         private const val CHANNEL_ID = "yt_downloader_channel"
-        private const val NOTIFICATION_ID = 1001
+        /** Одна и та же нотификация у прогресса и у foreground-сервиса. */
+        const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_COMPLETE_ID = 1002
     }
 }

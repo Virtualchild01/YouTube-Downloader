@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedQuality: QualityPreset = QualityPresets.DEFAULT
     private var availableQualities: List<QualityPreset> = QualityPresets.ALL
 
+    /** Ссылка на собственный слушатель: DownloadController отписывает по конкретному объекту. */
+    private val downloadListener: (DownloadController.Event) -> Unit = ::onDownloadEvent
+
     companion object {
         private const val TAG = "YTDownloader"
         private const val PREFS_NAME = "yt_downloader_prefs"
@@ -107,7 +110,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        downloads.observe(::onDownloadEvent)
+        downloads.observe(downloadListener)
         restoreDownloadState()
     }
 
@@ -127,7 +130,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        downloads.stopObserving()
+        downloads.stopObserving(downloadListener)
         super.onStop()
     }
 
@@ -377,6 +380,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         currentUrl = url
+        // Файл кук, выгруженный при входе, со временем устаревает: WebView держит
+        // живую сессию и сам обновляет токены. Обновляем строго на главном потоке —
+        // CookieManager нельзя поднимать из фонового.
+        runCatching { auth.refreshFromCookieManager() }
         binding.cardPreview.visibility = View.GONE
         binding.layoutFetchStatus.visibility = View.VISIBLE
         binding.progressFetch.visibility = View.VISIBLE
@@ -488,6 +495,7 @@ class MainActivity : AppCompatActivity() {
         val video = currentVideoInfo
         if (url == null || video == null) return
 
+        runCatching { auth.refreshFromCookieManager() }
         val started = downloads.start(url, video, selectedQuality)
         if (!started) {
             Toast.makeText(this, getString(R.string.error_download_generic), Toast.LENGTH_SHORT).show()

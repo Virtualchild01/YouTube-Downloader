@@ -18,20 +18,46 @@ object YtDlpEngine {
 
     private const val TAG = "YtDlpEngine"
 
+    /** Как часто подтягивать свежий yt-dlp. YouTube ломает старые версии примерно раз в месяц. */
+    private const val UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000L
+    private const val PREFS = "yt_dlp_engine"
+    private const val KEY_LAST_UPDATE = "last_update_at"
+
     @Volatile
     private var initialized = false
 
-    /** Инициализирует yt-dlp и FFmpeg. Идемпотентно; повторный вызов ничего не делает. */
+    /**
+     * Инициализирует yt-dlp и FFmpeg. Идемпотентно; повторный вызов движок не перезапускает.
+     *
+     * Заодно раз в сутки подтягивает свежую версию yt-dlp: приложение поставляет
+     * библиотеку 0.18.1, а YouTube регулярно меняет плеер, и старая версия начинает
+     * отвечать 403 и «Sign in to confirm you're not a bot» даже с валидными cookies.
+     */
     @Synchronized
     fun ensureInitialized(context: Context) {
-        if (initialized) return
         val app = context.applicationContext
 
-        YoutubeDL.getInstance().init(app)
-        runCatching { FFmpeg.getInstance().init(app) }
-            .onFailure { Log.w(TAG, "FFmpeg init failed", it) }
+        if (!initialized) {
+            YoutubeDL.getInstance().init(app)
+            runCatching { FFmpeg.getInstance().init(app) }
+                .onFailure { Log.w(TAG, "FFmpeg init failed", it) }
+            initialized = true
+        }
 
-        initialized = true
+        updateEngineIfStale(app)
+    }
+
+    private fun updateEngineIfStale(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(KEY_LAST_UPDATE, 0L) < UPDATE_INTERVAL_MS) return
+
+        // Дату ставим до попытки: без сети на каждом запуске был бы новый запрос
+        prefs.edit().putLong(KEY_LAST_UPDATE, now).apply()
+        runCatching {
+            val status = YoutubeDL.getInstance().updateYoutubeDL(context)
+            Log.d(TAG, "yt-dlp update: $status")
+        }.onFailure { Log.w(TAG, "yt-dlp update failed", it) }
     }
 
     // ------------------------------------------------------------- запросы
@@ -68,7 +94,9 @@ object YtDlpEngine {
             addOption("--no-playlist")
             addOption("--no-check-certificate")
             addOption("-4")
-            addOption("--extractor-args", "youtube:player_client=default,ios")
+            // Клиент ios не умеет работать с cookies: с авторизованным аккаунтом он
+            // возвращает потоки без входа, и YouTube отвечает «Sign in to confirm
+            // you're not a bot». Клиент по умолчанию у yt-dlp подбирается сам.
             auth.cookiesPath()?.let { addOption("--cookies", it) }
         }
 
@@ -105,8 +133,11 @@ object YtDlpEngine {
             it.startsWith("ERROR:") || it.startsWith("yt-dlp: error:")
         } ?: lines.firstOrNull() ?: raw
 
-        return if (errorLine.contains("403") || errorLine.contains("SABR") ||
-            errorLine.contains("bot")
+        return if (errorLine.contains("403") ||
+            errorLine.contains("SABR") ||
+            errorLine.contains("not a bot", ignoreCase = true) ||
+            errorLine.contains("Sign in to confirm", ignoreCase = true) ||
+            errorLine.contains("confirm your age", ignoreCase = true)
         ) {
             forbidden
         } else {

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
@@ -47,6 +49,13 @@
             android:name=".ui.GalleryActivity"
             android:exported="false"
             android:label="@string/gallery_title" />
+
+        <!-- Держит процесс в foreground, пока идёт скачивание: иначе свёрнутое
+             приложение замораживается и YouTube отвечает «войдите в аккаунт». -->
+        <service
+            android:name=".notification.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <activity
             android:name=".ui.PlayerActivity"

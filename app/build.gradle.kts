@@ -10,14 +10,19 @@ plugins {
 // меньше, чем в gradle.properties, оно игнорируется. Иначе CI, передающий номер
 // запуска (а он у каждого workflow свой и начинается с 1), выпустит APK, который
 // Android откажется ставить поверх уже установленного.
+val fileProps = Properties().apply {
+    rootProject.file("gradle.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 val declaredVersionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 0
-val gradleVersionCode = (
-    Properties().apply {
-        rootProject.file("gradle.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-    }.getProperty("versionCode")?.toIntOrNull()
-) ?: 0
+val gradleVersionCode = fileProps.getProperty("versionCode")?.toIntOrNull() ?: 0
 val appVersionCode = maxOf(declaredVersionCode, gradleVersionCode).takeIf { it > 0 } ?: 1
-val appVersionName = project.findProperty("versionName")?.toString() ?: "1.0.$appVersionCode"
+
+// Имя версии тоже берём из gradle.properties, иначе CI (он передаёт только
+// versionCode = номер запуска) выпускал APK с именем вида «1.0.10042».
+val appVersionName = project.findProperty("versionName")?.toString()
+    ?: fileProps.getProperty("versionName")
+    ?: "1.0.$appVersionCode"
 
 android {
     namespace = "com.example.ytdownloader"
