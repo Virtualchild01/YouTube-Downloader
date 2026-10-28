@@ -75,6 +75,13 @@ dependencies {
     // Image loading for thumbnails
     implementation("com.github.bumptech.glide:glide:4.16.0")
 
+    // Галерея и встроенный плеер
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    val media3 = "1.2.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
+
     // youtubedl-android (Движок yt-dlp & FFmpeg из приложения Seal)
     val youtubedlAndroid = "0.18.1"
     implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroid")

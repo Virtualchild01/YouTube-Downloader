@@ -43,6 +43,17 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.GalleryActivity"
+            android:exported="false"
+            android:label="@string/gallery_title" />
+
+        <activity
+            android:name=".ui.PlayerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.YTDownloader.Player" />
+
     </application>
 
 </manifest>

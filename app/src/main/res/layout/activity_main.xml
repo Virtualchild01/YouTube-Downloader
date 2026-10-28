@@ -66,12 +66,21 @@
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnGallery"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/gallery_title"
+                    app:icon="@android:drawable/ic_menu_gallery"
+                    app:iconTint="@color/on_surface" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAccount"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:layout_marginEnd="6dp"
-                    android:text="Войти"
+                    android:text="@string/btn_login"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     app:backgroundTint="@color/surface_variant"

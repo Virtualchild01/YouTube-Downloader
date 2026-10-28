@@ -27,4 +27,19 @@
     <string name="support_dialog_message">Приложение полностью бесплатное и без рекламы. Всё сделано для Вашего удобства, чтобы не засорять приложение всяким хламом.\n\nНо вы можете поддержать разработчика, в будущем это даст мотивацию на создание новых проектов, спасибо :)</string>
     <string name="support_dialog_btn_support">Поддержать</string>
     <string name="support_dialog_btn_close">Закрыть</string>
+
+    <!-- Галерея и плеер -->
+    <string name="gallery_title">Мои загрузки</string>
+    <string name="gallery_empty">Здесь появятся скачанные видео и аудио</string>
+    <string name="back">Назад</string>
+    <string name="close">Закрыть</string>
+    <string name="cancel">Отмена</string>
+    <string name="delete_title">Удалить файл?</string>
+    <string name="delete_action">Удалить</string>
+    <string name="delete_failed">Не удалось удалить файл</string>
+    <string name="no_player_for_format">Нет приложения, способного открыть этот формат</string>
+    <string name="btn_gallery">Загрузки</string>
+    <string name="btn_login">Войти</string>
+    <string name="save_failed">Не удалось сохранить файл в «Загрузки»</string>
+    <string name="status_saved">Готово! Файл сохранён в «Загрузки/YTDownloader»</string>
 </resources>

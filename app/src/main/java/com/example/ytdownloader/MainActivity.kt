@@ -11,11 +11,9 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
-import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.PowerManager
 import android.util.Log
 import android.view.Gravity
@@ -38,6 +36,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.example.ytdownloader.data.DownloadStorage
 import com.example.ytdownloader.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.yausername.ffmpeg.FFmpeg
@@ -319,6 +318,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnViewVideo.setOnClickListener {
             openDownloadsFolder()
+        }
+
+        binding.btnGallery.setOnClickListener {
+            startActivity(Intent(this, com.example.ytdownloader.ui.GalleryActivity::class.java))
         }
 
         binding.btnShare.setOnClickListener {
@@ -813,8 +816,14 @@ class MainActivity : AppCompatActivity() {
     private fun startDownloadProcess() {
         val url = currentUrl ?: return
         val video = currentVideoInfo ?: return
-        val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        if (!downloadDir.exists()) downloadDir.mkdirs()
+
+        // Качаем во временную папку приложения, а в «Загрузки» переносим через MediaStore:
+        // так не нужны разрешения на Android 10+ и не бывает EACCES на публичном пути.
+        val tempDir = File(cacheDir, "yt_downloads/${System.currentTimeMillis()}")
+        if (!tempDir.exists() && !tempDir.mkdirs()) {
+            Toast.makeText(this, getString(R.string.save_failed), Toast.LENGTH_LONG).show()
+            return
+        }
 
         binding.progressIndicator.isIndeterminate = false
         binding.progressIndicator.progress = 0
@@ -825,7 +834,7 @@ class MainActivity : AppCompatActivity() {
         val processId = "yt_dl_${System.currentTimeMillis()}"
 
         val request = YoutubeDLRequest(url)
-        request.addOption("-o", "${downloadDir.absolutePath}/%(title)s.%(ext)s")
+        request.addOption("-o", "${tempDir.absolutePath}/%(title)s.%(ext)s")
         request.addOption("--no-mtime")
         request.addOption("--no-playlist")
         request.addOption("--no-check-certificate")
@@ -911,23 +920,38 @@ class MainActivity : AppCompatActivity() {
                 }
                 isDownloading.set(false)
 
+                // Переносим готовые файлы из временной папки в Downloads/YTDownloader.
+                // Отбрасываем недокачанные .part и служебные файлы FFmpeg.
+                val produced = tempDir.listFiles()
+                    ?.filter { it.isFile && DownloadStorage.isMediaFile(it.name) }
+                    ?: emptyList()
+                val savedUris = produced.mapNotNull { file ->
+                    DownloadStorage.save(applicationContext, file, file.name)
+                }
+                tempDir.deleteRecursively()
+
+                if (savedUris.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        binding.progressIndicator.visibility = View.GONE
+                        binding.btnDownloadSelected.isEnabled = true
+                        val msg = getString(R.string.save_failed)
+                        binding.tvStatus.text = msg
+                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        completeDownloadNotification(title = "Ошибка загрузки", text = msg)
+                    }
+                    return@launch
+                }
+
                 withContext(Dispatchers.Main) {
                     binding.progressIndicator.visibility = View.GONE
                     binding.btnDownloadSelected.isEnabled = true
-                    binding.tvStatus.text = "Готово! Файл сохранён в «Загрузки»"
-                    Toast.makeText(this@MainActivity, "Видео успешно сохранено в «Загрузки»!", Toast.LENGTH_LONG).show()
+                    binding.tvStatus.text = getString(R.string.status_saved)
+                    Toast.makeText(this@MainActivity, getString(R.string.status_saved), Toast.LENGTH_LONG).show()
 
                     val shortTitle = (video.title ?: "Видео").take(40)
                     completeDownloadNotification(
                         title = "Загрузка завершена!",
-                        text = "$shortTitle сохранено в Загрузки"
-                    )
-
-                    MediaScannerConnection.scanFile(
-                        this@MainActivity,
-                        arrayOf(downloadDir.absolutePath),
-                        null,
-                        null
+                        text = "$shortTitle · сохранено в «Загрузки/YTDownloader»"
                     )
                 }
             } catch (e: Exception) {
