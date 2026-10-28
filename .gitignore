@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Идея / студия
+.idea/
+*.iml
+local.properties
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Подпись: ключ намеренно лежит в репозитории (обновления поверх должны работать),
+# но пароли и личные копии ключа сюда попадать не должны
+*.jks
+!app/debug.keystore
+*.keystore
+!app/debug.keystore
