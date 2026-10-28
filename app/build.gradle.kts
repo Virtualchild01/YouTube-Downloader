@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,7 +12,7 @@ plugins {
 // Android откажется ставить поверх уже установленного.
 val declaredVersionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 0
 val gradleVersionCode = (
-    java.util.Properties().apply {
+    Properties().apply {
         rootProject.file("gradle.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
     }.getProperty("versionCode")?.toIntOrNull()
 ) ?: 0
