@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Версия берётся из gradle.properties, релизный workflow переопределяет её через -PversionCode/-PversionName.
+// Важно: versionCode должен строго возрастать, иначе Android откажется ставить обновление поверх.
+val appVersionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 10040
+val appVersionName = project.findProperty("versionName")?.toString() ?: "1.0.40"
+
 android {
     namespace = "com.example.ytdownloader"
     compileSdk = 34
@@ -11,24 +16,32 @@ android {
         applicationId = "com.example.ytdownloader"
         minSdk = 24
         targetSdk = 34
-        // Автоматическое повышение версии при каждой сборке на GitHub Actions
-        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 39
-        versionName = "1.0.${(project.findProperty("versionCode") as? String) ?: "39"}"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Оптимизация размера: только современная 64-битная архитектура смартфонов (~35 МБ)
+        // Оптимизация размера: только 64-битная архитектура современных смартфонов
         ndk {
             abiFilters.add("arm64-v8a")
         }
     }
 
     signingConfigs {
+        // debug и release подписываются ОДНИМ И ТЕМ ЖЕ ключом.
+        // Если ключ сменить, обновление поверх установленной версии упадёт с
+        // INSTALL_FAILED_UPDATE_INCOMPATIBLE — пользователю придётся удалять приложение.
         getByName("debug") {
             storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+        }
+        create("release") {
+            storeFile = file("debug.keystore")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
         }
     }
 
@@ -40,8 +53,12 @@ android {
 
     buildTypes {
         release {
+            // R8 выключен осознанно: Jackson разбирает JSON в VideoInfo/VideoFormat по аннотациям,
+            // а youtubedl-android не поставляет consumer-rules. Включать после проверки на устройстве.
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            isShrinkResources = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -82,7 +99,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-ui:$media3")
 
-    // youtubedl-android (Движок yt-dlp & FFmpeg из приложения Seal)
+    // youtubedl-android (движок yt-dlp & FFmpeg из приложения Seal)
     val youtubedlAndroid = "0.18.1"
     implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroid")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlAndroid")

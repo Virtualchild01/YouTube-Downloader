@@ -27,9 +27,50 @@
 7. **Постоянный сертификат подписи**:
    - В проект встроен постоянный ключ `app/debug.keystore`, благодаря чему любые последующие обновления будут устанавливаться «поверх» без ошибок конфликта пакетов.
 
-## Сборка через GitHub Actions (в 1 клик)
+## Сборка
 
-1. Создайте новый репозиторий на GitHub (например, `YTDownloader`).
-2. Распакуйте архив `YTDownloader_Project.zip` на компьютере.
-3. Зайдите внутрь распакованной папки, выделите всё содержимое (`Ctrl + A`) и загрузите на GitHub через кнопку **Add file** → **Upload files**.
-4. GitHub Actions автоматически скомпилирует приложение во вкладке **Actions** и предоставит готовый файл `YTDownloader-debug-apk`.
+### Отладочная сборка (каждый push)
+
+Workflow `build_apk.yml` компилирует debug-APK при push в `main`/`master` и при пулл-реквестах. Результат лежит в артефакте **`YTDownloader-debug-apk`** во вкладке **Actions**.
+
+### Релиз (вручную)
+
+Workflow `release.yml` — **Actions → Release APK → Run workflow**. Нужно указать `version_name` вида `1.0.40`; `versionCode` считается автоматически.
+
+Что делает workflow:
+
+1. Собирает `assembleRelease`.
+2. **Проверяет сертификат подписи** через `apksigner verify --print-certs`. Если отпечаток не совпал с ожидаемым — сборка падает и релиз не публикуется. Это защита от случайной смены ключа: такой APK всё равно не поставился бы поверх установленного.
+3. Публикует GitHub Release с файлом `YTDownloader.<версия>.apk`.
+
+## Обновления поверх установленной версии
+
+Чтобы обновление ставилось без удаления приложения, должны совпасть три вещи:
+
+| Что | Значение | Где закреплено |
+|---|---|---|
+| `applicationId` | `com.example.ytdownloader` | `app/build.gradle.kts` |
+| Ключ подписи | SHA-256 `11a08f2d…88863` | `app/debug.keystore` + шаг загрузки ключа в обоих workflow |
+| `versionCode` | строго больше предыдущего | `gradle.properties`, для релиза считается из `versionName` |
+
+Схема `versionCode`: `MAJOR × 10000 + MINOR × 100 + PATCH` (версия `1.0.40` → `10040`). У версий до 1.0.39 номер был просто числом сборки (`39`), поэтому нумерация продолжает расти.
+
+**`applicationId` и ключ подписи менять нельзя** — после этого обновление перестанет ставиться, и пользователям придётся удалять приложение вручную. Ключ `app/debug.keystore` лежит в репозитории намеренно; пароль в `app/build.gradle.kts` можно переопределить переменными окружения `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+
+## Структура кода
+
+```
+app/src/main/java/com/example/ytdownloader/
+├── MainActivity.kt              экран: ссылка, превью, выбор качества
+├── data/
+│   ├── DownloadController.kt    скачивание и AVI-конвертация, живёт в процессе
+│   ├── YtDlpEngine.kt           инициализация yt-dlp, сборка запросов, разбор ошибок
+│   ├── QualityPreset.kt         варианты качества как данные
+│   ├── AuthStore.kt             cookies в формате Netscape
+│   ├── AviConverter.kt          FFmpeg → AVI (Xvid + MP3)
+│   ├── DownloadStorage.kt       запись в Downloads/YTDownloader через MediaStore
+│   └── DownloadedMedia.kt
+├── ui/                          галерея, встроенный плеер, диалог входа
+├── notification/                прогресс в шторке
+└── util/                        размеры, длительность, таймкод
+```
