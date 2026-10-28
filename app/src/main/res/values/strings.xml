@@ -5,7 +5,6 @@
     <string name="hint_enter_url">Ссылка на YouTube или Shorts</string>
     <string name="btn_paste">Вставить</string>
     <string name="btn_download">Скачать видео</string>
-    <string name="btn_open_gallery">В галерею</string>
     <string name="btn_share">Поделиться</string>
     <string name="label_select_quality">Выберите качество и размер:</string>
     <string name="theme_title">Тема приложения</string>
@@ -24,8 +23,7 @@
 
     <!-- Галерея и плеер -->
     <string name="gallery_title">Мои загрузки</string>
-    <string name="gallery_empty">Здесь появятся скачанные видео и аудио</string>
-    <string name="back">Назад</string>
+    <string name="gallery_empty">Здесь появятся скачанные видео и аудио</string>    <string name="back">Назад</string>
     <string name="close">Закрыть</string>
     <string name="cancel">Отмена</string>
     <string name="delete_title">Удалить файл?</string>
@@ -33,8 +31,8 @@
     <string name="delete_failed">Не удалось удалить файл</string>
     <string name="no_player_for_format">Нет приложения, способного открыть этот формат</string>
     <string name="btn_login">Войти</string>
-    <string name="save_failed">Не удалось сохранить файл в «Загрузки»</string>
-    <string name="status_saved">Готово! Файл сохранён в «Загрузки/YTDownloader»</string>
+    <string name="save_failed">Не удалось сохранить файл в память устройства</string>
+    <string name="status_saved">Готово! Видео сохранено в «Фильмы/YTDownloader», аудио — в «Музыка/YTDownloader»</string>
     <string name="status_converting_percent">Конвертация в AVI: %1$d%%</string>
     <string name="avi_error_init">Не удалось подготовить FFmpeg</string>
     <string name="avi_error_missing">FFmpeg недоступен, перезапустите приложение</string>
@@ -102,10 +100,8 @@
     <string name="error_unknown_video">Видео</string>
     <string name="error_download_title">Ошибка загрузки</string>
     <string name="download_complete_title">Загрузка завершена!</string>
-    <string name="download_complete_text">%1$s · сохранено в «Загрузки/YTDownloader»</string>
+    <string name="download_complete_text">%1$s · сохранено в память устройства</string>
     <string name="share_chooser">Поделиться видео</string>
-    <string name="open_downloads_chooser">Открыть папку Загрузки</string>
-    <string name="file_saved_toast">Файл сохранён в папку «Загрузки»</string>
 
     <!-- Уведомления -->
     <string name="notification_channel_name">Загрузка видео</string>

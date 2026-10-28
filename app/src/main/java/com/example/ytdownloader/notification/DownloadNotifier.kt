@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.ytdownloader.R
+import com.example.ytdownloader.ui.GalleryActivity
 
 /**
  * Прогресс скачивания в шторке.
@@ -71,7 +72,9 @@ class DownloadNotifier(private val context: Context) {
         runCatching {
             manager.cancel(NOTIFICATION_ID)
 
-            val intent = Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+            // Открываем галерею приложения, а не системную папку «Загрузки»:
+            // файлы теперь лежат в Movies/YTDownloader и Music/YTDownloader.
+            val intent = Intent(context, GalleryActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pendingIntent = PendingIntent.getActivity(

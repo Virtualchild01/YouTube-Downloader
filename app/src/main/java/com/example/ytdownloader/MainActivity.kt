@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.example.ytdownloader.data.AuthStore
 import com.example.ytdownloader.data.DownloadController
+import com.example.ytdownloader.data.DownloadStorage
 import com.example.ytdownloader.data.QualityPreset
 import com.example.ytdownloader.data.QualityPresets
 import com.example.ytdownloader.data.YtDlpEngine
@@ -108,6 +109,21 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         downloads.observe(::onDownloadEvent)
         restoreDownloadState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Счётчик в строке «Мои загрузки»: файл мог появиться, пока экран был в фоне
+        refreshGalleryCount()
+    }
+
+    private fun refreshGalleryCount() {
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                DownloadStorage.list(applicationContext).size
+            }
+            binding.tvGalleryCount.text = if (count > 0) count.toString() else ""
+        }
     }
 
     override fun onStop() {
@@ -275,10 +291,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnDownloadSelected.setOnClickListener { checkPermissionsAndDownload() }
-        binding.btnViewVideo.setOnClickListener { openDownloadsFolder() }
-        binding.btnGallery.setOnClickListener {
-            startActivity(Intent(this, com.example.ytdownloader.ui.GalleryActivity::class.java))
-        }
+        binding.cardGallery.setOnClickListener { openGallery() }
 
         binding.btnShare.setOnClickListener {
             val url = currentUrl ?: return@setOnClickListener
@@ -485,17 +498,8 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- прочее
 
-    private fun openDownloadsFolder() {
-        try {
-            startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS))
-        } catch (e: Exception) {
-            val fallback = Intent(Intent.ACTION_GET_CONTENT).apply { type = "video/*" }
-            try {
-                startActivity(Intent.createChooser(fallback, getString(R.string.open_downloads_chooser)))
-            } catch (ex: Exception) {
-                Toast.makeText(this, R.string.file_saved_toast, Toast.LENGTH_LONG).show()
-            }
-        }
+    private fun openGallery() {
+        startActivity(Intent(this, com.example.ytdownloader.ui.GalleryActivity::class.java))
     }
 
     private fun showSupportDialog() {
