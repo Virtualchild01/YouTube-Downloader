@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.example.ytdownloader.R
 import com.example.ytdownloader.data.DownloadStorage
 import com.example.ytdownloader.data.DownloadedMedia
 import com.example.ytdownloader.databinding.ActivityGalleryBinding
@@ -70,17 +71,17 @@ class GalleryActivity : AppCompatActivity() {
             try {
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, getString(com.example.ytdownloader.R.string.no_player_for_format), Toast.LENGTH_LONG).show()
+                Toast.makeText(this, R.string.no_player_for_format, Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun confirmDelete(media: DownloadedMedia) {
         MaterialAlertDialogBuilder(this)
-            .setTitle(getString(com.example.ytdownloader.R.string.delete_title))
+            .setTitle(R.string.delete_title)
             .setMessage(media.displayName)
-            .setNegativeButton(getString(com.example.ytdownloader.R.string.cancel), null)
-            .setPositiveButton(getString(com.example.ytdownloader.R.string.delete_action)) { _, _ ->
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete_action) { _, _ ->
                 lifecycleScope.launch {
                     val ok = withContext(Dispatchers.IO) {
                         DownloadStorage.delete(applicationContext, media)
@@ -88,7 +89,7 @@ class GalleryActivity : AppCompatActivity() {
                     if (!ok) {
                         Toast.makeText(
                             this@GalleryActivity,
-                            getString(com.example.ytdownloader.R.string.delete_failed),
+                            R.string.delete_failed,
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -96,9 +97,5 @@ class GalleryActivity : AppCompatActivity() {
                 }
             }
             .show()
-    }
-
-    companion object {
-        const val TAG_NAME = "GalleryActivity"
     }
 }

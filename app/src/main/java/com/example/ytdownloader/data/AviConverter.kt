@@ -21,9 +21,20 @@ object AviConverter {
     private const val VIDEO_BITRATE = "2200k"
     private const val MAX_HEIGHT = 720
 
+    /** Почему конвертация не удалась — текст для пользователя выбирает UI-слой. */
+    enum class FailureReason {
+        FFMPEG_INIT_FAILED,
+        FFMPEG_MISSING,
+        PROCESS_START_FAILED,
+        FFMPEG_ERROR,
+        NO_OUTPUT
+    }
+
     sealed interface Result {
         data class Success(val file: File) : Result
-        data class Failure(val message: String) : Result
+
+        /** @param detail последняя строка stderr от FFmpeg — для логов и показа пользователю. */
+        data class Failure(val reason: FailureReason, val detail: String? = null) : Result
     }
 
     fun convert(
@@ -40,99 +51,53 @@ object AviConverter {
             File(ffmpegPackageDir(context), "usr/lib")
         } catch (e: Exception) {
             Log.e(TAG, "ffmpeg init failed", e)
-            return Result.Failure("FFmpeg не инициализирован: ${e.message ?: "неизвестная ошибка"}")
+            return Result.Failure(FailureReason.FFMPEG_INIT_FAILED, e.message)
         }
 
         val binary = ffmpegBinary(context)
-        if (!binary.exists() || !binary.canExecute()) {
-            return Result.Failure("FFmpeg недоступен, перезапустите приложение")
-        }
-
-        if (!libDir.isDirectory) {
-            return Result.Failure("FFmpeg не распакован, перезапустите приложение")
-        }
-
-        val command = buildList {
-            add(binary.absolutePath)
-            add("-y")
-            add("-hide_banner")
-            add("-nostats")
-            add("-loglevel")
-            add("error")
-            add("-progress")
-            add("pipe:1")
-            add("-i")
-            add(input.absolutePath)
-            add("-vf")
-            // Не апскейлим: если источник меньше 720p, оставляем как есть.
-            // Xvid требует чётную высоту, поэтому trunc(.../2)*2. Запятая внутри min()
-            // экранируется — она разделитель фильтров, а не аргумент.
-            add("scale=-2:trunc(min($MAX_HEIGHT\\,ih)/2)*2")
-            add("-c:v")
-            add("libxvid")
-            add("-b:v")
-            add(VIDEO_BITRATE)
-            add("-pix_fmt")
-            add("yuv420p")
-            // B-кадры в упакованном bitstream ломают часть старых плееров
-            add("-bf")
-            add("0")
-            add("-vtag")
-            add("XVID")
-            add("-c:a")
-            add("libmp3lame")
-            add("-b:a")
-            add("128k")
-            add("-ar")
-            add("44100")
-            add("-ac")
-            add("2")
-            add("-f")
-            add("avi")
-            add(output.absolutePath)
+        if (!binary.exists() || !binary.canExecute() || !libDir.isDirectory) {
+            return Result.Failure(FailureReason.FFMPEG_MISSING)
         }
 
         val process = try {
-            ProcessBuilder(command)
+            ProcessBuilder(buildCommand(binary, libDir, input, output))
                 .redirectErrorStream(false)
                 .apply {
-                    environment()["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${context.applicationInfo.nativeLibraryDir}"
+                    environment()["LD_LIBRARY_PATH"] =
+                        "${libDir.absolutePath}:${context.applicationInfo.nativeLibraryDir}"
                     environment()["TMPDIR"] = context.cacheDir.absolutePath
                     environment()["HOME"] = context.filesDir.absolutePath
                 }
                 .start()
         } catch (e: Exception) {
             Log.e(TAG, "cannot start ffmpeg", e)
-            return Result.Failure("Не удалось запустить FFmpeg")
+            return Result.Failure(FailureReason.PROCESS_START_FAILED, e.message)
         }
 
         val errorBuffer = StringBuilder()
         val errorThread = Thread {
             runCatching {
                 process.errorStream.bufferedReader().forEachLine { line ->
-                    if (errorBuffer.length < 4000) errorBuffer.appendLine(line)
+                    if (errorBuffer.length < MAX_ERROR_LENGTH) errorBuffer.appendLine(line)
                 }
             }
         }.apply { isDaemon = true; start() }
 
         try {
+            // Читаем stdout целиком: без этого FFmpeg упрётся в полный буфер и зависнет
             process.inputStream.bufferedReader().forEachLine { line ->
-                val percent = parseProgress(line, durationSec)
-                if (percent != null) onProgress(percent)
+                parseProgress(line, durationSec)?.let(onProgress)
             }
 
             val exit = process.waitFor()
 
             if (exit != 0) {
                 output.delete()
-                val detail = errorBuffer.toString().lines()
-                    .lastOrNull { it.isNotBlank() }
-                    ?: "код выхода $exit"
-                return Result.Failure("Конвертация не удалась: $detail")
+                return Result.Failure(FailureReason.FFMPEG_ERROR, lastErrorLine(errorBuffer, exit))
             }
 
             if (!output.exists() || output.length() == 0L) {
-                return Result.Failure("FFmpeg не создал файл")
+                return Result.Failure(FailureReason.NO_OUTPUT)
             }
 
             onProgress(100)
@@ -140,11 +105,42 @@ object AviConverter {
         } catch (e: Exception) {
             runCatching { process.destroy() }
             output.delete()
-            return Result.Failure(e.message ?: "Ошибка конвертации")
+            return Result.Failure(FailureReason.FFMPEG_ERROR, e.message)
         } finally {
             runCatching { errorThread.join(TimeUnit.SECONDS.toMillis(2)) }
         }
     }
+
+    private fun buildCommand(binary: File, libDir: File, input: File, output: File): List<String> =
+        listOf(
+            binary.absolutePath,
+            "-y", "-hide_banner", "-nostats",
+            "-loglevel", "error",
+            "-progress", "pipe:1",
+            "-i", input.absolutePath,
+            "-vf", scaleFilter(),
+            "-c:v", "libxvid",
+            "-b:v", VIDEO_BITRATE,
+            "-pix_fmt", "yuv420p",
+            // B-кадры в упакованном bitstream ломают часть старых плееров
+            "-bf", "0",
+            "-vtag", "XVID",
+            "-c:a", "libmp3lame",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-ac", "2",
+            "-f", "avi",
+            output.absolutePath
+        )
+
+    /**
+     * Не апскейлим источник меньше 720p. Xvid требует чётную высоту, поэтому
+     * trunc(.../2)*2. Запятая внутри min() экранируется — это разделитель фильтров.
+     */
+    private fun scaleFilter(): String = "scale=-2:trunc(min($MAX_HEIGHT\\,ih)/2)*2"
+
+    private fun lastErrorLine(buffer: StringBuilder, exitCode: Int): String =
+        buffer.toString().lines().lastOrNull { it.isNotBlank() } ?: "exit code $exitCode"
 
     /**
      * ffmpeg -progress печатает пары key=value. Исторически out_time_ms в FFmpeg содержит
@@ -153,6 +149,7 @@ object AviConverter {
      */
     private fun parseProgress(line: String, durationSec: Long): Int? {
         if (durationSec <= 0) return null
+
         val key = line.substringBefore('=', "")
         val value = line.substringAfter('=', "").trim()
 
@@ -180,4 +177,6 @@ object AviConverter {
     /** Куда FFmpeg.init() распаковывает общие библиотеки. */
     private fun ffmpegPackageDir(context: Context): File =
         File(File(File(context.noBackupFilesDir, "youtubedl-android"), "packages"), "ffmpeg")
+
+    private const val MAX_ERROR_LENGTH = 4000
 }

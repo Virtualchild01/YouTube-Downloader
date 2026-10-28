@@ -12,8 +12,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.example.ytdownloader.data.DownloadedMedia
 import com.example.ytdownloader.databinding.ItemGalleryBinding
+import com.example.ytdownloader.util.Formatters
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 class GalleryAdapter(
     private val onOpen: (DownloadedMedia) -> Unit,
@@ -31,13 +31,13 @@ class GalleryAdapter(
 
         @SuppressLint("SetTextI18n")
         fun bind(item: DownloadedMedia) {
+            val context = b.root.context
             b.tvName.text = item.displayName
 
-            val details = buildList {
-                add(formatSize(item.sizeBytes))
-                if (item.durationMs > 0) add(formatDuration(item.durationMs))
-            }
-            b.tvMeta.text = details.joinToString(" · ")
+            b.tvMeta.text = buildList {
+                add(Formatters.size(context, item.sizeBytes))
+                if (item.durationMs > 0) add(Formatters.timecode(item.durationMs))
+            }.joinToString(" · ")
 
             b.tvBadge.visibility = if (item.isAudio) View.VISIBLE else View.GONE
             b.tvBadge.text = item.displayName.substringAfterLast('.', "").uppercase(Locale.US)
@@ -53,22 +53,6 @@ class GalleryAdapter(
                 onLongPress(item)
                 true
             }
-        }
-
-        private fun formatSize(bytes: Long): String {
-            if (bytes <= 0) return "—"
-            val mb = bytes / (1024.0 * 1024.0)
-            return if (mb >= 1024.0) String.format(Locale.US, "%.2f ГБ", mb / 1024.0)
-            else String.format(Locale.US, "%.0f МБ", mb)
-        }
-
-        private fun formatDuration(ms: Long): String {
-            val totalSec = TimeUnit.MILLISECONDS.toSeconds(ms)
-            val h = totalSec / 3600
-            val m = (totalSec % 3600) / 60
-            val s = totalSec % 60
-            return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m, s)
-            else String.format(Locale.US, "%d:%02d", m, s)
         }
     }
 
