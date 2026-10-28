@@ -3,10 +3,19 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Версия берётся из gradle.properties, релизный workflow переопределяет её через -PversionCode/-PversionName.
-// Важно: versionCode должен строго возрастать, иначе Android откажется ставить обновление поверх.
-val appVersionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 10040
-val appVersionName = project.findProperty("versionName")?.toString() ?: "1.0.40"
+// Версия берётся из gradle.properties. Собранную версию можно переопределить через
+// -PversionCode/-PversionName, но versionCode только вверх: если переданное значение
+// меньше, чем в gradle.properties, оно игнорируется. Иначе CI, передающий номер
+// запуска (а он у каждого workflow свой и начинается с 1), выпустит APK, который
+// Android откажется ставить поверх уже установленного.
+val declaredVersionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 0
+val gradleVersionCode = (
+    java.util.Properties().apply {
+        rootProject.file("gradle.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }.getProperty("versionCode")?.toIntOrNull()
+) ?: 0
+val appVersionCode = maxOf(declaredVersionCode, gradleVersionCode).takeIf { it > 0 } ?: 1
+val appVersionName = project.findProperty("versionName")?.toString() ?: "1.0.$appVersionCode"
 
 android {
     namespace = "com.example.ytdownloader"
