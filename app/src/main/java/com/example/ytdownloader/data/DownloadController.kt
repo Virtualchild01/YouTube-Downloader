@@ -54,6 +54,23 @@ class DownloadController private constructor(context: Context) {
         data class Failed(val message: String) : Event
     }
 
+    /** Итог последней загрузки. Нужен, чтобы UI не остался на «скачивается» после сворачивания. */
+    @Volatile
+    var lastOutcome: Outcome? = null
+        private set
+
+    sealed interface Outcome {
+        data object Completed : Outcome
+        data class Failed(val message: String) : Outcome
+    }
+
+    /** Отдаёт итог один раз: иначе каждое возвращение в Activity показывало бы тост заново. */
+    fun consumeOutcome(): Outcome? {
+        val outcome = lastOutcome ?: return null
+        lastOutcome = null
+        return outcome
+    }
+
     val isRunning: Boolean get() = running.get()
 
     fun observe(listener: (Event) -> Unit) {
@@ -73,6 +90,7 @@ class DownloadController private constructor(context: Context) {
         notifier.ensureChannel()
         lastProgress = 0
         lastStatusText = null
+        lastOutcome = null
         scope.launch { runDownload(url, video, quality) }
         return true
     }
@@ -102,7 +120,7 @@ class DownloadController private constructor(context: Context) {
             }
 
             val filesToSave = if (quality.kind == QualityKind.AVI) {
-                val converted = convertToAvi(downloaded.first(), tempDir, video.duration) ?: return
+                val converted = convertToAvi(downloaded.first(), tempDir, video) ?: return
                 listOf(converted)
             } else {
                 downloaded
@@ -203,21 +221,18 @@ class DownloadController private constructor(context: Context) {
     // ---------------------------------------------------------- конвертация
 
     /** Возвращает готовый AVI или null, если конвертация сорвалась (ошибка уже отправлена). */
-    private fun convertToAvi(source: File, tempDir: File, durationSec: Int): File? {
+    private fun convertToAvi(source: File, tempDir: File, video: VideoInfo): File? {
         val target = File(tempDir, source.nameWithoutExtension + ".avi")
 
         return when (val result = AviConverter.convert(
             context = appContext,
             input = source,
             output = target,
-            durationSec = durationSec.toLong(),
+            durationSec = video.duration.toLong(),
             onProgress = { percent ->
-                emit(
-                    Event.Progress(
-                        percent,
-                        appContext.getString(R.string.status_converting_percent, percent)
-                    )
-                )
+                val text = appContext.getString(R.string.status_converting_percent, percent)
+                emit(Event.Progress(percent, text))
+                notifier.progress(video.notificationTitle(), text, percent)
             }
         )) {
             is AviConverter.Result.Success -> {
@@ -271,8 +286,14 @@ class DownloadController private constructor(context: Context) {
                 lastProgress = event.percent
                 lastStatusText = event.text
             }
-            is Event.Failed -> lastStatusText = event.message
-            Event.Completed -> Unit
+            Event.Completed -> {
+                lastStatusText = null
+                lastOutcome = Outcome.Completed
+            }
+            is Event.Failed -> {
+                lastStatusText = event.message
+                lastOutcome = Outcome.Failed(event.message)
+            }
         }
         mainHandler.post { listener?.invoke(event) }
     }

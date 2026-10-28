@@ -130,19 +130,35 @@ class MainActivity : AppCompatActivity() {
     private fun onDownloadEvent(event: DownloadController.Event) {
         when (event) {
             is DownloadController.Event.Progress -> showProgress(event.percent, event.text)
-            DownloadController.Event.Completed -> showCompletion()
-            is DownloadController.Event.Failed -> showFailure(event.message)
+            DownloadController.Event.Completed -> {
+                // Итог уже показан, повторять его при следующем onStart не нужно
+                downloads.consumeOutcome()
+                showCompletion()
+            }
+            is DownloadController.Event.Failed -> {
+                downloads.consumeOutcome()
+                showFailure(event.message)
+            }
         }
     }
 
-    /** Возврат в приложение во время загрузки: подхватываем актуальный прогресс. */
+    /** Возврат в приложение во время или после загрузки: подхватываем актуальное состояние. */
     private fun restoreDownloadState() {
-        if (!downloads.isRunning) return
-        showProgress(
-            downloads.lastProgress,
-            downloads.lastStatusText ?: getString(R.string.status_downloading),
-            indeterminate = false
-        )
+        if (downloads.isRunning) {
+            showProgress(
+                downloads.lastProgress,
+                downloads.lastStatusText ?: getString(R.string.status_downloading),
+                indeterminate = false
+            )
+            return
+        }
+
+        // Загрузка закончилась, пока Activity была в фоне — событие уже никто не слушал
+        when (val outcome = downloads.consumeOutcome()) {
+            null -> Unit
+            DownloadController.Outcome.Completed -> showCompletion()
+            is DownloadController.Outcome.Failed -> showFailure(outcome.message)
+        }
     }
 
     private fun showProgress(percent: Int, text: String, indeterminate: Boolean = false) {
