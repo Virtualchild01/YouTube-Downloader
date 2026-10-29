@@ -3,6 +3,7 @@ package com.example.ytdownloader.data
 import android.content.Context
 import android.util.Log
 import com.yausername.ffmpeg.FFmpeg
+import com.yausername.youtubedl_android.YoutubeDL
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -25,6 +26,8 @@ object AviConverter {
     enum class FailureReason {
         FFMPEG_INIT_FAILED,
         FFMPEG_MISSING,
+        /** Не нашлась разделяемая библиотека, без которой FFmpeg-бинарь не запускается. */
+        DEPENDENCY_MISSING,
         PROCESS_START_FAILED,
         FFMPEG_ERROR,
         NO_OUTPUT
@@ -59,12 +62,26 @@ object AviConverter {
             return Result.Failure(FailureReason.FFMPEG_MISSING)
         }
 
+        // Пакет FFmpeg собран с Ubuntu-тулчейном и не содержит C++ runtime: librubberband,
+        // libx265, libvmaf и ещё десяток библиотек из usr/lib требуют libc++_shared.so.
+        // Лежит он в пакете Python, который распаковывает инициализация yt-dlp. Если её
+        // ещё не было (конвертация запущена в свежем процессе), пакета в noBackupFilesDir
+        // нет, и линковщик падает с «library "libc++_shared.so" not found».
+        val pythonLibDir = File(pythonPackageDir(context), "usr/lib")
+        if (!File(pythonLibDir, REQUIRED_RUNTIME).exists()) {
+            runCatching { YoutubeDL.getInstance().init(context) }
+                .onFailure { Log.w(TAG, "python package init failed", it) }
+        }
+        if (!File(pythonLibDir, REQUIRED_RUNTIME).exists()) {
+            Log.e(TAG, "$REQUIRED_RUNTIME missing in $pythonLibDir")
+            return Result.Failure(FailureReason.DEPENDENCY_MISSING, REQUIRED_RUNTIME)
+        }
+
         val process = try {
             ProcessBuilder(buildCommand(binary, libDir, input, output))
                 .redirectErrorStream(false)
                 .apply {
-                    environment()["LD_LIBRARY_PATH"] =
-                        "${libDir.absolutePath}:${context.applicationInfo.nativeLibraryDir}"
+                    environment()["LD_LIBRARY_PATH"] = libraryPath(context, libDir, pythonLibDir)
                     environment()["TMPDIR"] = context.cacheDir.absolutePath
                     environment()["HOME"] = context.filesDir.absolutePath
                 }
@@ -174,9 +191,30 @@ object AviConverter {
     private fun ffmpegBinary(context: Context): File =
         File(context.applicationInfo.nativeLibraryDir, "libffmpeg.so")
 
+    /**
+     * Порядок важен: сначала usr/lib самого FFmpeg (там свои libav*, libxvidcore),
+     * потом C++ runtime из пакета Python, затем нативные библиотеки APK.
+     */
+    private fun libraryPath(context: Context, ffmpegLibDir: File, pythonLibDir: File): String =
+        listOf(
+            ffmpegLibDir.absolutePath,
+            pythonLibDir.absolutePath,
+            context.applicationInfo.nativeLibraryDir
+        ).joinToString(":")
+
     /** Куда FFmpeg.init() распаковывает общие библиотеки. */
     private fun ffmpegPackageDir(context: Context): File =
-        File(File(File(context.noBackupFilesDir, "youtubedl-android"), "packages"), "ffmpeg")
+        File(packagesDir(context), "ffmpeg")
+
+    /** Пакет Python (распаковывается инициализацией yt-dlp) — источник libc++_shared.so. */
+    private fun pythonPackageDir(context: Context): File =
+        File(packagesDir(context), "python")
+
+    private fun packagesDir(context: Context): File =
+        File(File(context.noBackupFilesDir, "youtubedl-android"), "packages")
 
     private const val MAX_ERROR_LENGTH = 4000
+
+    /** C++ runtime, который FFmpeg-пакет ожидает, но не поставляет. */
+    private const val REQUIRED_RUNTIME = "libc++_shared.so"
 }

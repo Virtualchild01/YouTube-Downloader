@@ -259,6 +259,8 @@ class DownloadController private constructor(context: Context) {
                 appContext.getString(R.string.avi_error_init)
             AviConverter.FailureReason.FFMPEG_MISSING ->
                 appContext.getString(R.string.avi_error_missing)
+            AviConverter.FailureReason.DEPENDENCY_MISSING ->
+                appContext.getString(R.string.avi_error_dependency)
             AviConverter.FailureReason.PROCESS_START_FAILED ->
                 appContext.getString(R.string.avi_error_start)
             AviConverter.FailureReason.FFMPEG_ERROR ->

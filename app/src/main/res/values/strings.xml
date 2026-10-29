@@ -36,6 +36,7 @@
     <string name="status_converting_percent">Конвертация в AVI: %1$d%%</string>
     <string name="avi_error_init">Не удалось подготовить FFmpeg</string>
     <string name="avi_error_missing">FFmpeg недоступен, перезапустите приложение</string>
+    <string name="avi_error_dependency">Не удалось подготовить FFmpeg для конвертации в AVI</string>
     <string name="avi_error_start">Не удалось запустить FFmpeg</string>
     <string name="avi_error_convert">Конвертация не удалась</string>
     <string name="avi_error_no_output">FFmpeg не создал файл</string>
