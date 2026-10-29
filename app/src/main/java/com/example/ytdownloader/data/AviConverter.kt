@@ -13,6 +13,9 @@ import java.util.concurrent.TimeUnit
  * FFmpeg из youtubedl-android — это обычный CLI-бинарь (libffmpeg.so), собранный
  * с --enable-libxvid и --enable-libmp3lame, поэтому запускаем его отдельным процессом
  * и читаем прогресс из -progress pipe:1.
+ *
+ * Кодируем встроенным mpeg4, а не libxvid: результат тот же MPEG-4 Part 2, но mpeg4
+ * умеет slice-многопоточность и грузит все ядра (см. PRIMARY_ENCODER).
  */
 object AviConverter {
 
@@ -77,8 +80,36 @@ object AviConverter {
             return Result.Failure(FailureReason.DEPENDENCY_MISSING, REQUIRED_RUNTIME)
         }
 
+        val primary = runEncoder(context, binary, libDir, pythonLibDir, input, output, durationSec, onProgress, PRIMARY_ENCODER)
+        if (primary is Result.Success) return primary
+
+        // mpeg4 и libxvid пишут один и тот же MPEG-4 Part 2, но у libxvid bitstream может
+        // быть чуть ближе к референсу. Если основной кодировщик почему-то не завёлся,
+        // пробуем его — медленнее, зато почти наверняка.
+        val primaryFailure = primary as Result.Failure
+        Log.w(TAG, "encoder $PRIMARY_ENCODER failed (${primaryFailure.detail}), retrying with $FALLBACK_ENCODER")
+        val fallback = runEncoder(context, binary, libDir, pythonLibDir, input, output, durationSec, onProgress, FALLBACK_ENCODER)
+        // Если и запасной не сработал, показываем ошибку основного: он и есть штатный путь
+        return when (fallback) {
+            is Result.Success -> fallback
+            is Result.Failure -> primaryFailure.copy(detail = fallback.detail ?: primaryFailure.detail)
+        }
+    }
+
+    private fun runEncoder(
+        context: Context,
+        binary: File,
+        libDir: File,
+        pythonLibDir: File,
+        input: File,
+        output: File,
+        durationSec: Long,
+        onProgress: (percent: Int) -> Unit,
+        encoder: String
+    ): Result {
+        output.delete()
         val process = try {
-            ProcessBuilder(buildCommand(binary, libDir, input, output))
+            ProcessBuilder(buildCommand(binary, input, output, encoder))
                 .redirectErrorStream(false)
                 .apply {
                     environment()["LD_LIBRARY_PATH"] = libraryPath(context, libDir, pythonLibDir)
@@ -128,27 +159,38 @@ object AviConverter {
         }
     }
 
-    private fun buildCommand(binary: File, libDir: File, input: File, output: File): List<String> =
-        listOf(
-            binary.absolutePath,
-            "-y", "-hide_banner", "-nostats",
-            "-loglevel", "error",
-            "-progress", "pipe:1",
-            "-i", input.absolutePath,
-            "-vf", scaleFilter(),
-            "-c:v", "libxvid",
-            "-b:v", VIDEO_BITRATE,
-            "-pix_fmt", "yuv420p",
-            // B-кадры в упакованном bitstream ломают часть старых плееров
-            "-bf", "0",
-            "-vtag", "XVID",
-            "-c:a", "libmp3lame",
-            "-b:a", "128k",
-            "-ar", "44100",
-            "-ac", "2",
-            "-f", "avi",
-            output.absolutePath
-        )
+    /**
+     * Основной кодировщик — встроенный mpeg4, запасной — libxvid.
+     *
+     * Они пишут один и тот же MPEG-4 Part 2 (ASP), и с -vtag XVID файл неотличим для
+     * DivX/Xvid-плееров. Разница в скорости: libxvid в этой сборке не объявляет
+     * AV_CODEC_CAP_SLICE_THREADS / AV_CODEC_CAP_FRAME_THREADS, и FFmpeg в
+     * validate_thread_parameters() сбрасывает thread_count в 1 — кодирование идёт
+     * в одно ядро. У mpeg4 slice-потоки есть, поэтому -threads 0 грузит все ядра.
+     * Запасной вариант нужен на случай, если конкретный плеер придирчив к bitstream.
+     */
+    private const val PRIMARY_ENCODER = "mpeg4"
+    private const val FALLBACK_ENCODER = "libxvid"
+
+    private fun buildCommand(
+        binary: File,
+        input: File,
+        output: File,
+        encoder: String
+    ): List<String> = buildList {
+        add(binary.absolutePath)
+        addAll(listOf("-y", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1"))
+        addAll(listOf("-i", input.absolutePath))
+        addAll(listOf("-vf", scaleFilter()))
+        addAll(listOf("-c:v", encoder))
+        // mpeg4 умеет slice-многопоточность, libxvid — нет (FFmpeg всё равно сбросит в 1)
+        if (encoder == PRIMARY_ENCODER) addAll(listOf("-threads", "0"))
+        addAll(listOf("-b:v", VIDEO_BITRATE, "-pix_fmt", "yuv420p"))
+        // B-кадры в упакованном bitstream ломают часть старых плееров
+        addAll(listOf("-bf", "0", "-vtag", "XVID"))
+        addAll(listOf("-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2"))
+        addAll(listOf("-f", "avi", output.absolutePath))
+    }
 
     /**
      * Не апскейлим источник меньше 720p. Xvid требует чётную высоту, поэтому
