@@ -17,7 +17,7 @@ import java.util.Locale
 
 class GalleryAdapter(
     private val onOpen: (DownloadedMedia) -> Unit,
-    private val onLongPress: (DownloadedMedia) -> Unit
+    private val onMore: (DownloadedMedia) -> Unit
 ) : ListAdapter<DownloadedMedia, GalleryAdapter.VH>(DIFF) {
 
     fun submit(items: List<DownloadedMedia>) = submitList(items)
@@ -49,10 +49,11 @@ class GalleryAdapter(
                 .into(b.ivThumb)
 
             b.root.setOnClickListener { onOpen(item) }
-            b.root.setOnLongClickListener {
-                onLongPress(item)
-                true
-            }
+
+            // Точки над превью открывают меню «Поделиться / Удалить».
+            // Раньше удаление жило на долгом нажатии по карточке — жест,
+            // который никто не находил; видимая кнопка честнее.
+            b.btnMore.setOnClickListener { onMore(item) }
         }
     }
 

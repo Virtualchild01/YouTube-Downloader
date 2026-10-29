@@ -63,6 +63,18 @@
             android:exported="false"
             android:theme="@style/Theme.YTDownloader.Player" />
 
+        <!-- Отдаёт скачанные файлы другим приложениям при «Поделиться».
+             Нужен только на Android 7–9, где файлы лежат как file://. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

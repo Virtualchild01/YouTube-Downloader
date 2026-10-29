@@ -10,13 +10,16 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.example.ytdownloader.R
 import com.example.ytdownloader.data.DownloadStorage
 import com.example.ytdownloader.data.DownloadedMedia
+import com.example.ytdownloader.data.MediaSharer
 import com.example.ytdownloader.databinding.ActivityGalleryBinding
+import com.example.ytdownloader.databinding.SheetFileActionsBinding
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Галерея скачанного: сетка файлов из Downloads/YTDownloader. */
+/** Галерея скачанного: сетка файлов из Movies/YTDownloader и Music/YTDownloader. */
 class GalleryActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGalleryBinding
@@ -29,7 +32,7 @@ class GalleryActivity : AppCompatActivity() {
 
         adapter = GalleryAdapter(
             onOpen = { open(it) },
-            onLongPress = { confirmDelete(it) }
+            onMore = { showActions(it) }
         )
 
         binding.rvGallery.layoutManager = GridLayoutManager(this, 2)
@@ -74,6 +77,26 @@ class GalleryActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.no_player_for_format, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /** Шторка с действиями над файлом: поделиться или удалить. */
+    private fun showActions(media: DownloadedMedia) {
+        val sheetBinding = SheetFileActionsBinding.inflate(layoutInflater)
+        val sheet = BottomSheetDialog(this).apply { setContentView(sheetBinding.root) }
+
+        sheetBinding.tvSheetTitle.text = media.displayName
+
+        sheetBinding.rowShare.setOnClickListener {
+            sheet.dismiss()
+            MediaSharer.share(this, media)
+        }
+
+        sheetBinding.rowDelete.setOnClickListener {
+            sheet.dismiss()
+            confirmDelete(media)
+        }
+
+        sheet.show()
     }
 
     private fun confirmDelete(media: DownloadedMedia) {

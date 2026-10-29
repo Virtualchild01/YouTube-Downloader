@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Пути, которые FileProvider отдаёт другим приложениям.
+
+     Нужно только на Android 7–9: там скачанные файлы лежат как обычные file://
+     внутри Movies/YTDownloader и Music/YTDownloader, а отдавать чужим приложениям
+     file:// запрещено (FileUriExposedException). На Android 10+ файлы и так
+     content:// через MediaStore, и FileProvider не используется.
+
+     Пути перечислены поимённо, а не весь внешний том: FileProvider не должен
+     открывать чужим приложениям больше, чем одну папку приложения. -->
+<paths>
+    <external-path
+        name="movies"
+        path="Movies/YTDownloader/" />
+    <external-path
+        name="music"
+        path="Music/YTDownloader/" />
+    <external-path
+        name="downloads"
+        path="Download/YTDownloader/" />
+</paths>

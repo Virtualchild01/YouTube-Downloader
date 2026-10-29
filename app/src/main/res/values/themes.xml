@@ -30,5 +30,10 @@
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/black</item>
         <item name="android:navigationBarColor">@android:color/black</item>
+        <!-- На панели плеера фон всегда чёрный, поэтому системные иконки
+             (часы, батарея, кнопки навигации) должны быть светлыми —
+             иначе в светлой теме они становятся чёрными и пропадают. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

@@ -34,7 +34,7 @@
                 android:id="@+id/tvBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="top|end"
+                android:layout_gravity="top|start"
                 android:layout_margin="8dp"
                 android:background="@color/surface"
                 android:paddingHorizontal="8dp"
@@ -45,6 +45,20 @@
                 android:visibility="gone"
                 tools:text="MP3"
                 tools:visibility="visible" />
+
+            <!-- Меню действий: «Поделиться» и «Удалить». Заменяет долгое нажатие,
+                 которое приходилось угадывать: видимая кнопка очевиднее жеста. -->
+            <ImageButton
+                android:id="@+id/btnMore"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_thumb_button"
+                android:contentDescription="@string/file_actions"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_more_vert" />
         </FrameLayout>
 
         <TextView
