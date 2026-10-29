@@ -33,14 +33,25 @@ data class QualityPreset(
 ) {
     val isAudio: Boolean get() = kind == QualityKind.AUDIO
 
-    /** Значение для `-f`. Для аудио не используется — там достаточно `bestaudio`. */
+    /** HDR имеет смысл только для видео: в mp3 его нет, а AVI перекодируется в Xvid 8 бит. */
+    val supportsHdr: Boolean get() = kind == QualityKind.VIDEO
+
+    /**
+     * Значение для `-f`. Для аудио не используется — там достаточно `bestaudio`.
+     *
+     * HDR отдельным фильтром здесь не запрашивается намеренно. yt-dlp сортирует форматы
+     * по `res`, а `hdr` идёт следующим полем, поэтому при равном разрешении он сам берёт
+     * HDR-поток (AV1/VP9.2), а при его отсутствии — SDR. Если поставить HDR первым
+     * фильтром, ролик, у которого HDR есть только в 1080p, скачался бы в 1080p вместо
+     * доступного 4K — то есть выбор качества деградировал бы.
+     */
     val formatSelector: String
-        get() = if (kind == QualityKind.AUDIO) {
-            "bestaudio"
-        } else {
-            "bestvideo[height<=$maxHeight][ext=mp4]+bestaudio[ext=m4a]" +
-                "/bestvideo[height<=$maxHeight]+bestaudio" +
-                "/best[height<=$maxHeight]/best"
+        get() = when (kind) {
+            QualityKind.AUDIO -> "bestaudio"
+            else ->
+                "bestvideo[height<=$maxHeight][ext=mp4]+bestaudio[ext=m4a]" +
+                    "/bestvideo[height<=$maxHeight]+bestaudio" +
+                    "/best[height<=$maxHeight]/best"
         }
 
     /** Есть ли в ролике разрешение, достаточное для этого пункта. */
@@ -52,6 +63,14 @@ data class QualityPreset(
 
 object QualityPresets {
 
+    /**
+     * 16K (8640p) и 8K (4320p). YouTube пока не отдаёт 16K, поэтому этот пункт
+     * в обычном ролике просто не появится — фильтр по [QualityPreset.minLongEdge]
+     * скрывает его, пока такого потока нет. Битррейты — грубая оценка для подписи
+     * размера; реальный размер yt-dlp покажет в прогрессе.
+     */
+    val UHD_8640 = QualityPreset(R.string.quality_8640, QualityKind.VIDEO, 15360, 8640, 120_000_000L)
+    val UHD_4320 = QualityPreset(R.string.quality_4320, QualityKind.VIDEO, 7680, 4320, 45_000_000L)
     val UHD_2160 = QualityPreset(R.string.quality_2160, QualityKind.VIDEO, 3840, 2160, 18_000_000L)
     val QHD_1440 = QualityPreset(R.string.quality_1440, QualityKind.VIDEO, 2560, 1440, 9_000_000L)
     val FHD_1080 = QualityPreset(R.string.quality_1080, QualityKind.VIDEO, 1920, 1080, 3_500_000L)
@@ -66,7 +85,10 @@ object QualityPresets {
      */
     val AVI = QualityPreset(R.string.quality_avi, QualityKind.AVI, 0, 720, 2_400_000L)
 
-    val ALL = listOf(UHD_2160, QHD_1440, FHD_1080, HD_720, SD_480, SD_360, MP3, AVI)
+    val ALL = listOf(
+        UHD_8640, UHD_4320, UHD_2160, QHD_1440, FHD_1080,
+        HD_720, SD_480, SD_360, MP3, AVI
+    )
 
     val DEFAULT = HD_720
 

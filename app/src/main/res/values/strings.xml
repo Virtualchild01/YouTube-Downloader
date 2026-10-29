@@ -49,6 +49,8 @@
     <string name="avi_error_no_output">FFmpeg не создал файл</string>
 
     <!-- Варианты качества -->
+    <string name="quality_8640">16K Ultra HD (8640p)</string>
+    <string name="quality_4320">8K Ultra HD (4320p)</string>
     <string name="quality_2160">4K Ultra HD (2160p)</string>
     <string name="quality_1440">2K Quad HD (1440p)</string>
     <string name="quality_1080">1080p Full HD</string>
@@ -57,6 +59,9 @@
     <string name="quality_360">360p</string>
     <string name="quality_mp3">Аудио (MP3)</string>
     <string name="quality_avi">AVI для старых ТВ (Xvid)</string>
+
+    <!-- Пометка HDR в списке качества: показываем, когда поток реально будет HDR -->
+    <string name="quality_hdr_suffix">%1$s · HDR</string>
 
     <!-- Статусы и прогресс -->
     <string name="status_video_ready">Видео готово к скачиванию!</string>

@@ -435,10 +435,17 @@ class MainActivity : AppCompatActivity() {
 
         val labels = availableQualities.map { preset ->
             val bytes = Formatters.estimateBytes(info.duration.toLong(), preset.estimateBitrateBps)
-            if (bytes > 0) {
+            val label = if (bytes > 0) {
                 "${getString(preset.labelRes)} (${Formatters.estimatedSize(this, bytes)})"
             } else {
                 getString(preset.labelRes)
+            }
+            // Пометка HDR: yt-dlp при равном разрешении предпочитает HDR-поток,
+            // но пользователь должен видеть это до скачивания, а не догадываться.
+            if (preset.supportsHdr && YtDlpEngine.willDownloadHdr(info, preset.maxHeight)) {
+                getString(R.string.quality_hdr_suffix, label)
+            } else {
+                label
             }
         }
 
@@ -455,8 +462,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateDownloadButtonText() {
-        binding.btnDownloadSelected.text =
-            getString(R.string.btn_download_quality, getString(selectedQuality.labelRes))
+        // На кнопке тоже помечаем HDR, иначе выбранный пункт списка и кнопка расходятся
+        val label = if (selectedQuality.supportsHdr &&
+            currentVideoInfo?.let { YtDlpEngine.willDownloadHdr(it, selectedQuality.maxHeight) } == true
+        ) {
+            getString(R.string.quality_hdr_suffix, getString(selectedQuality.labelRes))
+        } else {
+            getString(selectedQuality.labelRes)
+        }
+        binding.btnDownloadSelected.text = getString(R.string.btn_download_quality, label)
     }
 
     // ------------------------------------------------------------- загрузка
